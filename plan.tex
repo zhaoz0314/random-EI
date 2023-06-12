@@ -1,0 +1,213 @@
+\documentclass[11pt,openany,oneside]{article} %ams{amsart}
+\usepackage{fullpage, enumitem, amsmath}
+\usepackage[normalem]{ulem}
+%\usepackage{ulem}
+\usepackage{cancel, tensor}
+\usepackage[T1]{fontenc}
+\usepackage{xcolor}
+\usepackage[colorlinks = true]{hyperref}
+%\usepackage[style=numeric]{biblatex}
+\usepackage[numbers]{natbib}
+\usepackage{tikz}
+
+\usepackage{longtable}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[font=small,labelfont=bf]{caption}
+\renewcommand{\labelitemi}{$\circ$}
+
+\usepackage{geometry} % set the margins
+%\newgeometry{hmargin={40mm,40mm},vmargin={40mm,40mm}}
+%\newgeometry{hmargin={20mm,20mm},vmargin={20mm,20mm}}
+\linespread{1.666}
+
+%ams \renewcommand{\fullwidthdisplay}{} % eliminate ams page-center (instead of env-center) alignment
+
+%zh% \usepackage{fontspec} % to let auctex know using xetex
+%zh% \usepackage{zhnumber}
+%zh% \zhnumsetup{style={Traditional,Financial}}
+%zh% \usepackage[CJKmath]{xeCJK}
+%zh% \setCJKmainfont[RawFeature=vertical]{Ming}
+%zh% % \setCJKfamilyfont{vert}[RawFeature=vertical]{Ming}}
+%zh% \newcommand{\baselinemove}[1]{\raise.26em\hbox{#1}} % align chinese and latin
+%zh% % \def\CJKmovesymbol#1{\raise.35em\hbox{#1}} % TeX version's \newcommand; assigning the expression without valuation
+%zh% \let\CJKsymbol\baselinemove % instantaneous valuation (not assigning the expression)
+%zh% \let\CJKpunctsymbol\baselinemove
+
+\usepackage{amssymb, mathrsfs, dutchcal}
+\DeclareMathAlphabet{\matholdcal}{OMS}{cmsy}{m}{n}
+
+\renewcommand{\AA}{\mathbb{A}} \newcommand{\BB}{\mathbb{B}} \newcommand{\CC}{\mathbb{C}}
+\newcommand{\DD}{\mathbb{D}} \newcommand{\EE}{\mathbb{E}} \newcommand{\FF}{\mathbb{F}}
+\newcommand{\GG}{\mathbb{G}} \newcommand{\HH}{\mathbb{H}} \newcommand{\II}{\mathbb{I}}
+\newcommand{\JJ}{\mathbb{J}} \newcommand{\KK}{\mathbb{K}} \newcommand{\LL}{\mathbb{L}}
+\newcommand{\MM}{\mathbb{M}} \newcommand{\NN}{\mathbb{N}} \newcommand{\OO}{\mathbb{O}}
+\newcommand{\PP}{\mathbb{P}} \newcommand{\QQ}{\mathbb{Q}} \newcommand{\RR}{\mathbb{R}}
+\renewcommand{\SS}{\mathbb{S}} \newcommand{\TT}{\mathbb{T}} \newcommand{\UU}{\mathbb{U}}
+\newcommand{\VV}{\mathbb{V}} \newcommand{\WW}{\mathbb{W}} \newcommand{\XX}{\mathbb{X}}
+\newcommand{\YY}{\mathbb{Y}} \newcommand{\ZZ}{\mathbb{Z}}
+
+\newcommand{\Aa}{\mathcal{A}} \newcommand{\Bb}{\mathcal{B}} \newcommand{\Cc}{\mathcal{C}}
+\newcommand{\Dd}{\mathcal{D}} \newcommand{\Ee}{\mathcal{E}} \newcommand{\Ff}{\mathcal{F}}
+\newcommand{\Gg}{\mathcal{G}} \newcommand{\Hh}{\mathcal{H}} \newcommand{\Ii}{\mathcal{I}}
+\newcommand{\Jj}{\mathcal{J}} \newcommand{\Kk}{\mathcal{K}} \newcommand{\Ll}{\mathcal{L}}
+\newcommand{\Mm}{\mathcal{M}} \newcommand{\Nn}{\mathcal{N}} \newcommand{\Oo}{\mathcal{O}}
+\newcommand{\Pp}{\mathcal{P}} \newcommand{\Qq}{\mathcal{Q}} \newcommand{\Rr}{\mathcal{R}}
+\newcommand{\Ss}{\mathcal{S}} \newcommand{\Tt}{\mathcal{T}} \newcommand{\Uu}{\mathcal{U}}
+\newcommand{\Vv}{\mathcal{V}} \newcommand{\Ww}{\mathcal{W}} \newcommand{\Xx}{\mathcal{X}}
+\newcommand{\Yy}{\mathcal{Y}} \newcommand{\Zz}{\mathcal{Z}}
+\newcommand{\aA}{\mathcal{a}} \newcommand{\bB}{\mathcal{b}} \newcommand{\cC}{\mathcal{c}}
+\newcommand{\dD}{\mathcal{d}} \newcommand{\eE}{\mathcal{e}} \newcommand{\fF}{\mathcal{f}}
+\newcommand{\gG}{\mathcal{g}} \newcommand{\hH}{\mathcal{h}} \newcommand{\iI}{\mathcal{i}}
+\newcommand{\jJ}{\mathcal{j}} \newcommand{\kK}{\mathcal{k}} \newcommand{\lL}{\mathcal{l}}
+\newcommand{\mM}{\mathcal{m}} \newcommand{\nN}{\mathcal{n}} \newcommand{\oO}{\mathcal{o}}
+\newcommand{\pP}{\mathcal{p}} \newcommand{\qQ}{\mathcal{q}} \newcommand{\rR}{\mathcal{r}}
+\newcommand{\sS}{\mathcal{s}} \newcommand{\tT}{\mathcal{t}} \newcommand{\uU}{\mathcal{u}}
+\newcommand{\vV}{\mathcal{v}} \newcommand{\wW}{\mathcal{w}} \newcommand{\xX}{\mathcal{x}}
+\newcommand{\yY}{\mathcal{y}} \newcommand{\zZ}{\mathcal{z}}
+
+\newcommand{\Aao}{\matholdcal{A}} \newcommand{\Bbo}{\matholdcal{B}} \newcommand{\Cco}{\matholdcal{C}}
+\newcommand{\Ddo}{\matholdcal{D}} \newcommand{\Eeo}{\matholdcal{E}} \newcommand{\Ffo}{\matholdcal{F}}
+\newcommand{\Ggo}{\matholdcal{G}} \newcommand{\Hho}{\matholdcal{H}} \newcommand{\Iio}{\matholdcal{I}}
+\newcommand{\Jjo}{\matholdcal{J}} \newcommand{\Kko}{\matholdcal{K}} \newcommand{\Llo}{\matholdcal{L}}
+\newcommand{\Mmo}{\matholdcal{M}} \newcommand{\Nno}{\matholdcal{N}} \newcommand{\Ooo}{\matholdcal{O}}
+\newcommand{\Ppo}{\matholdcal{P}} \newcommand{\Qqo}{\matholdcal{Q}} \newcommand{\Rro}{\matholdcal{R}}
+\newcommand{\Sso}{\matholdcal{S}} \newcommand{\Tto}{\matholdcal{T}} \newcommand{\Uuo}{\matholdcal{U}}
+\newcommand{\Vvo}{\matholdcal{V}} \newcommand{\Wwo}{\matholdcal{W}} \newcommand{\Xxo}{\matholdcal{X}}
+\newcommand{\Yyo}{\matholdcal{Y}} \newcommand{\Zzo}{\matholdcal{Z}}
+\newcommand{\aAo}{\matholdcal{a}} \newcommand{\bBo}{\matholdcal{b}} \newcommand{\cCo}{\matholdcal{c}}
+\newcommand{\dDo}{\matholdcal{d}} \newcommand{\eEo}{\matholdcal{e}} \newcommand{\fFo}{\matholdcal{f}}
+\newcommand{\gGo}{\matholdcal{g}} \newcommand{\hHo}{\matholdcal{h}} \newcommand{\iIo}{\matholdcal{i}}
+\newcommand{\jJo}{\matholdcal{j}} \newcommand{\kKo}{\matholdcal{k}} \newcommand{\lLo}{\matholdcal{l}}
+\newcommand{\mMo}{\matholdcal{m}} \newcommand{\nNo}{\matholdcal{n}} \newcommand{\oOo}{\matholdcal{o}}
+\newcommand{\pPo}{\matholdcal{p}} \newcommand{\qQo}{\matholdcal{q}} \newcommand{\rRo}{\matholdcal{r}}
+\newcommand{\sSo}{\matholdcal{s}} \newcommand{\tTo}{\matholdcal{t}} \newcommand{\uUo}{\matholdcal{u}}
+\newcommand{\vVo}{\matholdcal{v}} \newcommand{\wWo}{\matholdcal{w}} \newcommand{\xXo}{\matholdcal{x}}
+\newcommand{\yYo}{\matholdcal{y}} \newcommand{\zZo}{\matholdcal{z}}
+
+\newcommand{\AAt}{\text{A}} \newcommand{\BBt}{\text{B}} \newcommand{\CCt}{\text{C}}
+\newcommand{\DDt}{\text{D}} \newcommand{\EEt}{\text{E}} \newcommand{\FFt}{\text{F}}
+\newcommand{\GGt}{\text{G}} \newcommand{\HHt}{\text{H}} \newcommand{\IIt}{\text{I}}
+\newcommand{\JJt}{\text{J}} \newcommand{\KKt}{\text{K}} \newcommand{\LLt}{\text{L}}
+\newcommand{\MMt}{\text{M}} \newcommand{\NNt}{\text{N}} \newcommand{\OOt}{\text{O}}
+\newcommand{\PPt}{\text{P}} \newcommand{\QQt}{\text{Q}} \newcommand{\RRt}{\text{R}}
+\newcommand{\SSt}{\text{S}} \newcommand{\TTt}{\text{T}} \newcommand{\UUt}{\text{U}}
+\newcommand{\VVt}{\text{V}} \newcommand{\WWt}{\text{W}} \newcommand{\XXt}{\text{X}}
+\newcommand{\YYt}{\text{Y}} \newcommand{\ZZt}{\text{Z}}
+\newcommand{\aat}{\text{a}} \newcommand{\bbt}{\text{b}} \newcommand{\cct}{\text{c}}
+\newcommand{\ddt}{\text{d}} \newcommand{\eet}{\text{e}} \newcommand{\fft}{\text{f}}
+\newcommand{\ggt}{\text{g}} \newcommand{\hht}{\text{h}} \newcommand{\iit}{\text{i}}
+\newcommand{\jjt}{\text{j}} \newcommand{\kkt}{\text{k}} \newcommand{\llt}{\text{l}}
+\newcommand{\mmt}{\text{m}} \newcommand{\nnt}{\text{n}} \newcommand{\oot}{\text{o}}
+\newcommand{\ppt}{\text{p}} \newcommand{\qqt}{\text{q}} \newcommand{\rrt}{\text{r}}
+\newcommand{\sst}{\text{s}} \newcommand{\ttt}{\text{t}} \newcommand{\uut}{\text{u}}
+\newcommand{\vvt}{\text{v}} \newcommand{\wwt}{\text{w}} \newcommand{\xxt}{\text{x}}
+\newcommand{\yyt}{\text{y}} \newcommand{\zzt}{\text{z}}
+
+\renewcommand{\d}{\mathrm{d}}
+\newcommand{\D}{\mathrm{D}}
+
+%\varepsilon\vartheta\varkappa\varpi\varrho\varsigma\varphi
+
+\newcommand{\ct}{c\hspace{-0.8pt}t} % customized symbols
+\newcommand{\kbar}{\mathchar'26\mkern-9mu k}
+\newcommand{\inv}{{-1}}
+\newcommand{\one}{{(\hspace{-1pt}1\hspace{-1pt})}} \newcommand{\One}{{\lbrack\hspace{-1pt}1\hspace{-1pt}\rbrack}}
+\newcommand{\two}{{(\hspace{-1pt}2\hspace{-1pt})}} \newcommand{\Two}{{\lbrack\hspace{-1pt}2\hspace{-1pt}\rbrack}}
+\newcommand{\thr}{{(\hspace{-1pt}3\hspace{-1pt})}} \newcommand{\Thr}{{\lbrack\hspace{-1pt}3\hspace{-1pt}\rbrack}}
+\newcommand{\fur}{{(\hspace{-1pt}4\hspace{-1pt})}} \newcommand{\Fur}{{\lbrack\hspace{-1pt}4\hspace{-1pt}\rbrack}}
+\newcommand{\ssc}[1]{{(\hspace{-1pt}{#1}\hspace{-1pt})}} \newcommand{\Ssc}[1]{{\lbrack\hspace{-1pt}{#1}\hspace{-1pt}\rbrack}}
+\newcommand{\idc}[1]{{\indices{#1}}}
+\newcommand{\del}{\partial} \newcommand{\Del}{\nabla}
+\newcommand{\eol}{\hfill$\square$} \newcommand{\eop}{\hfill$\blacksquare$} % end of proof
+\newcommand{\trf}{\therefore} \newcommand{\prl}{\parallel}
+
+\newcommand{\bra}[1]{\langle #1\vert}% quantum bra
+\newcommand{\ket}[1]{\vert #1\rangle}% quantum ket
+\newcommand{\inp}[2]{\left\langle #1\vert #2\right\rangle}% inner product
+\newcommand{\mnp}[2]{\left\langle #1, #2\right\rangle}% inner product math notation
+\newcommand{\com}[2]{\left\lbrack #1,#2\right\rbrack}% commutator
+\newcommand{\nrm}[1]{\left\| #1\right\|}% vector length
+\newcommand{\mdl}[1]{\left\vert #1\right\vert}% modulus/norm/absolute value
+\newcommand{\ept}[1]{\left\langle #1\right\rangle}% expectation
+\newcommand{\Ept}[1]{\EE\left\lbrack #1\right\rbrack}% expectation
+\newcommand{\cml}[1]{\left\langle #1\right\rangle_c}% cumulant
+\newcommand{\ooo}[1]{\left( {#1}\right)}\newcommand{\mooo}[1]{\big( {#1}\big)}\newcommand{\looo}[1]{\left( {#1}\right.}\newcommand{\rooo}[1]{\left. {#1}\right)}% order of operation
+\newcommand{\phd}[1]{\left\lbrack {#1}\right\rbrack}\newcommand{\lphd}[1]{\left\lbrack {#1}\right.}\newcommand{\rphd}[1]{\left. {#1}\right\rbrack}% physical dimension
+\newcommand{\set}[1]{\left\lbrace #1\right\rbrace}\newcommand{\lset}[1]{\left\lbrace #1\right.}\newcommand{\rset}[1]{\left. #1\right\rbrace}% set
+\newcommand{\fix}[2]{\left. #2 \right\vert_{#1}}% evaluate
+\newcommand{\bix}[2]{\left\lbrack #2 \right\rbrack_{#1}}% big evaluate
+\newcommand{\pmx}[1]{\begin{pmatrix}#1\end{pmatrix}}% parenthesis matrix
+\newcommand{\bmx}[1]{\begin{bmatrix}#1\end{bmatrix}}% parenthesis matrix
+\newcommand{\bpm}[1]{\begin{pmatrix} #1\end{pmatrix}}% big parenthesis matrix
+\newcommand{\spm}[1]{\left(\begin{smallmatrix}#1 \end{smallmatrix}\right)}% small parenthesis matrix
+\newcommand{\dis}[2]{\text{#1}(#2)}% distribution
+\newcommand{\der}[2]{\frac{\del #1}{\del #2}}% partial derivative
+\newcommand{\brac}[2]{\frac{\displaystyle #1}{\displaystyle #2}}% big fraction
+\newcommand{\bd}[1]{\boldsymbol{#1}}% bold
+\newcommand{\ud}[1]{\boldsymbol{\mathrm{#1}}}% upright bold
+\newcommand{\bat}[1]{\hat{\boldsymbol{#1}}}% bold hat
+\newcommand{\tld}[1]{\tilde{#1}}% tilde
+\newcommand{\unt}[1]{\,\mathrm{#1}\,}% unit
+\newcommand{\unts}[2]{\,\mathrm{#1}^{#2}\,}% units
+\newcommand{\lcm}{\operatorname{lcm}} %
+\newcommand{\spn}{\operatorname{span}}
+\newcommand{\rnk}{\operatorname{rank}}
+\newcommand{\argmax}{\operatorname{argmax}}
+\renewcommand{\vec}{\operatorname{vec}}
+\renewcommand{\Re}{\mathrm{Re}}
+\renewcommand{\Im}{\mathrm{Im}}
+\newcommand{\Tr}{\mathrm{Tr}}
+\newcommand{\tand}{\quad\text{and}\quad}
+\newcommand{\tor}{\quad\text{or}\quad}
+\newcommand{\twhere}{\quad\text{where}\quad}
+\newcommand{\trar}{\quad\Rightarrow\quad}
+
+\newenvironment{prob}[1]{\noindent\textbf{#1}}{\medskip\indent}
+%\newenvironment{prob}[1]{\noindent\textbf{#1}}{\medskip\newpage}
+
+\newenvironment{boxtext}{\begin{center} \begin{tabular}{|p{0.9\textwidth}|} \hline\\}{ \\\\\hline \end{tabular} \end{center} }
+%\newenvironment{boxexpl}{\begin{center} \begin{longtable}{|p{0.9\textwidth}|} \hline\\\textbf{Example:}\\}{ \\\hline \end{longtable} \end{center} }
+\newcommand{\tse}{\\\vspace{-1\baselineskip}}
+\newcommand{\est}{\vspace{-1\baselineskip}\\}
+\newcommand{\ese}{\vspace{-1\baselineskip}\\\vspace{-2\baselineskip}}
+\newcommand{\esev}{\vspace{-1\baselineskip}\\\vspace{-1\baselineskip}}
+
+\renewcommand{\cases}[1]{{\left\lbrace{\begin{aligned}#1\end{aligned}}\right.}}
+
+\newcommand{\refcite}[1]{\citet{#1}} % Ref.~\cite{}
+\newcommand{\rf}{\mathrm{RF}}
+\newcommand{\rgc}{\text{RGC}}
+\newcommand{\ff}{\text{FF}}
+%ams\newtheorem{thm}{Theorem}
+%ams\newtheorem*{prf}{Proof}
+%ams\newtheorem{clm}{Claim}
+%ams\newtheorem{dfn}{Definition}
+%\renewcommand{\qedsymbol}{}
+
+%for some reason ams doesn't care about the vspace
+\title{\vspace{-2em}Plan for Analyzing Random Rate-based Netowrks}
+\author{Zhao, Zehui}
+\date{}
+\graphicspath{ {PS1_figs/} }
+
+\begin{document}
+\maketitle
+\tableofcontents
+
+\section{Background}
+Suppose a population of neurons indexed by $i$ can be modeled by an
+almost linear ODE as
+\begin{align*}
+  \bd{h} = -\bd{h}+\bd{J}\bd{r}+\bd{f},
+\end{align*}
+where $h_i$ is the latent variable for the $i$-th neuron, $\bd{J}$ is
+the connectivity of the network of neurons, $\bd{r} = \phi{\bd{h}}$ is
+the firing rate of the neurons, and $\bd{f}$ is the external input to
+the neurons.  It has been shown that
+
+
+% this location is for natbib, bibtex uses somewhere else
+\bibliography{Qualifier.bib} 
+\bibliographystyle{unsrtnat}
+\end{document}
