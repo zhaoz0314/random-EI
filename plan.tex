@@ -19,7 +19,7 @@
 \usepackage{geometry} % set the margins
 %\newgeometry{hmargin={40mm,40mm},vmargin={40mm,40mm}}
 %\newgeometry{hmargin={20mm,20mm},vmargin={20mm,20mm}}
-\linespread{1.666}
+%\linespread{1.666}
 
 %ams \renewcommand{\fullwidthdisplay}{} % eliminate ams page-center (instead of env-center) alignment
 
@@ -193,21 +193,135 @@
 
 \begin{document}
 \maketitle
-\tableofcontents
+% \tableofcontents
 
 \section{Background}
-Suppose a population of neurons indexed by $i$ can be modeled by an
+Suppose a population of $N$ neurons indexed by $i$ can be modeled by an
 almost linear ODE as
-\begin{align*}
+\begin{align}
+  \label{eq:rate-based}
   \bd{h} = -\bd{h}+\bd{J}\bd{r}+\bd{f},
-\end{align*}
-where $h_i$ is the latent variable for the $i$-th neuron, $\bd{J}$ is
-the connectivity of the network of neurons, $\bd{r} = \phi{\bd{h}}$ is
-the firing rate of the neurons, and $\bd{f}$ is the external input to
-the neurons.  It has been shown that
+\end{align}
+where $h_i$ is the latent variable for the $i$-th neuron, $\bd{J}$ is the connectivity of the
+network of neurons, $\bd{r} = \phi(\bd{h})$ is the firing rate of the neurons, and $\bd{f}$ is the
+external input to the neurons.  It has been shown that when $\bd{J}$ has independent Gaussian
+entries with variance $g^2/N$, $\phi$ is $\tanh$, and $\bd{f} =\bd{0}$, in the $N\to\infty$ limit,
+such a system will show chaotic activities~\cite{sompolinsky1988Chaos}.  Further, it has been shown
+that by treating the chaotic activities as the result of a multivariate-Gaussian, the activities are
+low-dimensional in the sense that the participation ratio of the principal components' variances
+doesn't exceed the order of $0.1$~\cite{clark2022Dimension}.  Empirically, an exponentially decaying autocorrelation
+as a prediction of Eq.~\ref{eq:rate-based} in the chaotic regime has been observed for neurons in
+multiple cortical areas~\cite{murray2014Hierarchy}.
 
+\section{Project 1:}
+However, it is unclear if in the chaotic Eq.~\ref{eq:rate-based} all initial conditions lead to the
+same chaotic attractor, or if there are multiple chaotic attractors with similar dimensionalities
+for different initial conditions to fall into.  Additionally, since the rate-based single unit
+dynamics is taken to describe perhaps qualitatively the activity of one or a homogeous
+group of neurons~\cite{dayan2005Theoretical, ocker2022Dynamics}, $\bd{J}$ should reflect the fact that most neurons are exclusively
+excitatory or inhibitory.  Motivated by these two ideas, the first project will attempt to modify
+$\bd{J}$ so that the resulting Eq.~\ref{eq:rate-based} can have multiple free states, i.e. chaotic
+attractors under no external input, for each single instance of $\bd{J}$.  This would mean observing
+numerically a ``multi-modal'' distribution of the neurons' activities' covariance matrices, with a
+fixed $\bd{J}$ and properly random initial conditions.
+
+Given preliminary simulations, simply having excitatory and inhibitory populations does not lead to
+multiple free states.  The current idea is that suppose $\bd{J}$ is sparse in addition to its $2$
+population structure, the randomness in having a connection or not may result in random clustering
+of neurons, making multiple free states more possible.
+% Additionally, free states obtained in such a way may respect to some extent the natural basis, in
+% the sense that \cite{}
+Having $N$ finite may further help
+increasing the generated fluctuations, further allowing multiple free states.  Specifically,
+the connectivity matrix will be described by
+\begin{align}
+  \label{eq:pseudospatial}
+  \bd{J} = \ooo{\frac{1}{\sqrt{N}}\bmx{1\\\vdots\\1}\bmx{\mu_E&\cdots&\mu_E&\mu_I&\cdots&\mu_I}+\bd{G}}\times\bd{B},
+\end{align}
+where $\times$ stands for entry-wise multiplication, the number of $1$'s is $N$, the number of $\mu_E$'s is the number of excitatory neurons $N_E$,
+the number of $\mu_I$'s is the number of inhibitory neurons $N_I$, $\mu_EN_E+\mu_IN_I = 0$, $\bd{G}$
+has independent Gaussian entries where the excitatory and inhibitory columns may or may not have the
+same variance, and $\bd{B}$ has independent Bernoulli entries.  The scaling of the structured term
+in Eq.~\ref{eq:pseudospatial} is adopted from \citet{landau2021Macroscopic}, and currently, $\bd{G}$ is also forced to
+have $0$ row-sums, motivated by \citet{rajan2006Eigenvalue} and numerical observations and numerically implemented by
+first generating all entries freely and then subtracting row-by-row the row averages.
+
+The initial conditions are currently generated using $N$ independent Gaussians.  Following
+\citet{rajan2010Stimulusdependent}, the external inputs are currently sinusoidal waves projected
+into the $N$ dimensional space in a random unit vector's direction, with random phase-shifts for
+each neuron.  Though the effect of an external input is not directly related to the aim of Project
+$1$, it is numerically observed that it can determine the activity's subspace (covariance) to some
+extent.  So having an external input and turning it down in time may allow one to control which free
+state the network settles into, if there are multiple free states as hoped.
+
+The similarities between covariance matrices $\bd{A}$ and $\bd{B}$ are currently quantified using
+\begin{align}
+  \label{eq:overlapSimilarity}
+  \frac{\Tr(\sqrt{\bd{A}}\sqrt{\bd{B}})}{\sqrt{\Tr \bd{A} \cdot \Tr \bd{B}}} = \frac{\sigma_{\bd{A}i}U_{ij}^2\sigma_{\bd{B}j}}{\sigma_{\bd{A}} \sigma_{\bd{B}}},
+\end{align}
+where $\sqrt{\bd{A}}$ and $\sqrt{\bd{B}}$ are well-defined matrix squareroots for positive
+semidefinite matrices, $\sigma_{\bd{X}i}$ is the standard deviation of the $i$-th principal
+component of $\bd{X}$, $\sigma_{\bd{X}}=\sqrt{\sum_i\sigma_{\bd{X}i}}$, and $\bd{U}$ is an
+orthogonal matrix that rotates the principal directions of $\bd{B}$ to $\bd{A}$'s.  Shown by the
+expression on the right in Eq.~\ref{eq:overlapSimilarity}, when the data are $1$ dimensional, this
+quantification is the same as the quantification $(\cos 2\theta+1)/2$ for directors.  When the data
+are multi-dimensional and only one $1$ principal direction differs, it's the same as weighing
+$(\cos 2\theta+1)/2$ by its corresponding variance.  This chosen quantification also currently
+appears to be analytics friendly.
+
+After the behavior can be found for a particular ensemble of $\bd{J}$, the goal will be to calcualte
+analytically the autocorrelation decay and the cross-correlation decay follwing
+\citet{kadmon2015Transition} and \citet{clark2022Dimension} and to hopefully also calculate the
+similarity Eq.\ref{eq:overlapSimilarity}, referring to how covariance matrices are dealt with in
+\cite{clark2022Dimension}.  Empirically, this may describe place cells in the hippocampus, as
+neurons there are weakly local, and the activities have different patterns
+% , which all respect the natural (neurons') basis,
+when the subject are placed in different
+environments$_{\text{need to find a good citation}}$.
+
+\section{Project 2:}
+As the second step of complicating the model, the connectivity $J$ will now include a spatial
+structure.  The current idea is to have
+\begin{align}
+  \label{eq:spatial}
+  \bd{J} = \ooo{\frac{1}{\sqrt{N}}\bmx{1\\\vdots\\1}\bmx{\mu_E&\cdots&\mu_E&\mu_I&\cdots&\mu_I}+\bd{G}}\times\bd{B}\times\bd{E},
+\end{align}
+where the additional term $\bd{E}$ is given by
+\begin{align}
+  \label{eq:space}
+  % E_{ij} = \sum_{n}\exp\frac{i-j+\lambda n}{\lambda}
+  E_{ij} = \exp\frac{-(i-j)^2}{2\lambda^2}.
+\end{align}
+Periodic boundary conditions may or may not be desirable given the network's behavior and the idea
+for Project $3$, and having
+$2$ or $3$ spatial dimensions should be tedious but doable.  Alternatively, one can also give
+$\bd{E}$ a block structure ($i$ and $j$ in Eq.~\ref{eq:space} are now block indices),
+corresponding to having the neurons forming spatial clusters, with inter-cluster connection
+strengths decaying with their cluster separation.
+
+The quantities to calcualte will be the same as the ones in Project $1$.  What to expect may depend
+on further numerics, but the cross-correlations can now be expected to have a spatial dependence.
+Empirically, this may describe a piece of cortex with the cortical columns interacting with
+distance-dependent strengths, such as in \citet{holmgren2003Pyramidal}.
+
+\section{Project 3:}
+And the third step in the complication is to have space anisotropic, which can be reasonable if
+space is taken to be the location of the neuron in the cortex, given the recent descoveries of
+several macroscopic gradients over the cortex~\cite{wang2020Macroscopic}.  The precise model to use
+is still unclear, but the current expectation is to again manipulate $\bd{E}$ so that a spatial bias
+can be added.  As an example, $\bd{E}$ can be described by
+\begin{align}
+  \label{eq:anisotropicSpace}
+  E_{ij} = \exp\frac{-(i-j)^2}{2i\lambda},
+\end{align}
+so that the higher level regions can receive broader inputs.
+
+The calculable quantities should be similar to those for Project $2$.  And empirically, this may
+work as a multi-areal model for the cortex~\cite{wang2020Macroscopic} and provide an alternative
+explantion to the diversity of autocorrelation timescales across brain areas
+\cite{murray2014Hierarchy}.
 
 % this location is for natbib, bibtex uses somewhere else
-\bibliography{Qualifier.bib} 
+\bibliography{neuralModeling.bib} 
 \bibliographystyle{unsrtnat}
 \end{document}
