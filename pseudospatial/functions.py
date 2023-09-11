@@ -228,70 +228,20 @@ def rk4_open_ode_segmenting_solver(velocity_fct, ext_input_fct, initial_conditio
 
 
 
-# first two cumulants
-# mean
-def mean_s_fct(traj_s):
-  return(jnp.mean(traj_s, axis = -1))
-
-# mean and cov
-def cov_s_fct(traj_s, mean_s):
-  # find shapes
-  traj_shape = traj_s.shape
-  axis_n = len(traj_shape)
-  axis_order = tuple(jnp.arange(axis_n - 2)) + (axis_n - 1, axis_n - 2)
-  # compute
-  mean_s = jnp.expand_dims(mean_s, -1)
-  deviation_s = traj_s - mean_s
-  cov_s = deviation_s @ jnp.transpose(deviation_s, axis_order) / traj_shape[-1]
-  return(cov_s)
-cov_s_fct = jax.jit(cov_s_fct)
-
-# cross/lagged-covariance with auto broadcasting (so can do cross
-def matched_correlation_fct(traj_1, traj_2):
-  # find shapes
-  correlation_len = traj_1.shape[-1]
-  convolution_len = 2 * correlation_len - 1
-  # remove means
-  deviation_s_1 = traj_1 - jnp.mean(traj_1, axis = -1,
-                                     keepdims = True)
-  deviation_s_2 = traj_2 - jnp.mean(traj_2, axis = -1,
-                                     keepdims = True)
-  # calculate the (unflipped) convolution
-  ft_1 = jnp.fft.rfft(deviation_s_1,
-                      convolution_len)
-  ft_2 = jnp.fft.rfft(deviation_s_2[..., ::-1],
-                      convolution_len)
-  convolved_array = jnp.fft.irfft(ft_1 * ft_2,
-                                  convolution_len)[...,
-                                    (correlation_len - 1):]
-  # normalize by the number of terms
-  return(convolved_array / (jnp.arange(correlation_len)[::-1] + 1))
-matched_correlation_fct = jax.jit(matched_correlation_fct)
-
-
-
-# participation ratio
-# 1d arrays only
-def pr_fct(array):
-  return(jnp.mean(array) ** 2 / jnp.mean(array ** 2))
-# pr_fct = jax.jit(pr_fct)
-
-
-
 # getting stats
 # prints the format
 def low_res_traj_s_fct(connectivity_s, wave_s, ext_connectivity_s, phase_s, initial_condition_s,
-                       labeled_time_interval_s, resolution, acor_inclusion = False):
+                       labeled_time_interval_s, resolution, frame_gap):
   # find condition numbers and system size
   connectivity_n = connectivity_s.shape[0]
   wave_n = wave_s.shape[0]
   ext_connectivity_n = ext_connectivity_s.shape[0]
   phase_n = phase_s.shape[0]
   initial_condition_n = initial_condition_s.shape[0]
-  time_len = ((jnp.sum(jnp.round((labeled_time_interval_s[:, 1]
-                                  - labeled_time_interval_s[:, 0])
-                                 * resolution))
-               - 1) // resolution + 1).astype(int)
+  frame_n = ((jnp.sum(jnp.round((labeled_time_interval_s[:, 1]
+                                 - labeled_time_interval_s[:, 0])
+                                * resolution))
+              - 1) // resolution + 1).astype(int)
   part_n = initial_condition_s.shape[1]
   print([connectivity_n, "connectivity_n"],
         [wave_n, "wave_n"],
@@ -302,7 +252,7 @@ def low_res_traj_s_fct(connectivity_s, wave_s, ext_connectivity_s, phase_s, init
   # initialize and loop through conditions
   low_res_traj_s = jnp.zeros(connectivity_n, wave_n, ext_connectivity_n, phase_n,
                      initial_condition_n,
-                     part_n, time_len)
+                     part_n, frame_n)
   print(round(time.time()))
   for connectivity_idx in range(connectivity_n):
     for wave_idx in range(wave_n):
@@ -323,60 +273,88 @@ def low_res_traj_s_fct(connectivity_s, wave_s, ext_connectivity_s, phase_s, init
                     labeled_long_interval_s, time), 
                   initial_condition_s[initial_condition_idx],
                   labeled_time_interval_s[0],
-                  resolution), axis = -1)[:, ::resolution]))
+                  resolution), axis = -1)[:, ::frame_gap]))
     print(round(time.time()), connectivity_idx, sep = ",")
   return(low_res_traj_s)
 
 
 
-# covariance orientation similarities
-# spectral matrix power for general square matrix
-def matrix_power_fct(matrix, power):
-  [eva_s, eve_s] = jnp.linalg.eig(matrix)
-  return(eve_s @ jnp.diag(eva_s) ** power @ jnp.linalg.inv(eve_s))
-matrix_power_fct = jax.jit(matrix_power_fct)
+# first two cumulants
+# mean
+def mean_s_fct(traj_s):
+  return(jnp.mean(traj_s, axis = -1))
 
-# faster spec mat power for hermitian, returns complex 64
-def h_matrix_power_fct(h_matrix, power):
-  [eva_s, eve_s] = jnp.linalg.eigh(h_matrix)
-  return(eve_s @ jnp.diag(eva_s).astype(complex) ** power
-         @ jnp.linalg.inv(eve_s))
-h_matrix_power_fct = jax.jit(h_matrix_power_fct)
+# mean and cov
+def cov_s_fct(traj_s, mean_s):
+  # find shapes
+  frame_n = traj_s.shape[-1]
+  # compute
+  mean_s = jnp.expand_dims(mean_s, -1)
+  deviation_s = traj_s - mean_s
+  cov_s = deviation_s @ jnp.swapaxes(deviation_s, -1, -2) / frame_n
+  return(cov_s)
+cov_s_fct = jax.jit(cov_s_fct)
 
-# faster spec mat power for positive definite, returns float32
-def pd_matrix_power_fct(pd_matrix, power):
-  [eva_s, eve_s] = jnp.linalg.eigh(pd_matrix)
-  # to avoid numerical errors resulting in neg evas
-  eva_s = eva_s - jnp.min(eva_s, initial = 0)
-  return(eve_s @ jnp.diag(eva_s) ** power @ jnp.linalg.inv(eve_s))
-pd_matrix_power_fct = jax.jit(pd_matrix_power_fct)
+# cross/lagged-covariance with auto broadcasting (so can do cross
+def matched_correlation_fct(traj_s_1, traj_s_2, mean_s_1, mean_s_2):
+  # find shapes
+  frame_n = traj_s_1.shape[-1]
+  convolution_len = 2 * frame_n - 1
+  # remove means
+  mean_s_1 = jnp.expand_dims(mean_s_1, -1)
+  mean_s_2 = jnp.expand_dims(mean_s_2, -1)
+  deviation_s_1 = traj_s_1 - mean_s_1
+  deviation_s_2 = traj_s_2 - mean_s_2
+  # calculate the (unflipped) convolution
+  ft_1 = jnp.fft.rfft(deviation_s_1,
+                      convolution_len)
+  ft_2 = jnp.fft.rfft(deviation_s_2[..., ::-1],
+                      convolution_len)
+  convolved_array = jnp.fft.irfft(ft_1 * ft_2,
+                                  convolution_len)[...,
+                                    (frame_n - 1):]
+  # normalize by the number of terms
+  return(convolved_array / (jnp.arange(frame_n)[::-1] + 1))
+matched_correlation_fct = jax.jit(matched_correlation_fct)
+
+
+
+# cov-based stats
+# eigen system/principal components
+def es_s_fct(matrix_s, prop = "pd"):
+  if prop == "pd":
+    output = jnp.linalg.eigh(matrix_s)
+    # remove numerical errors
+    output = [output[0] - jnp.min(output[0], initial = 0,
+                                  axis = -1,
+                                  keepdims = True),
+              output[1]]
+  elif prop == "h":
+    output = jnp.linalg.eigh(matrix_s)
+  else:
+    output = jnp.linalg.eig(matrix_s)
+  return(output)
+es_s_fct = jax.jit(es_s_fct, static_argnums = (1,))
+
+# participation ratios
+def dim_s_fct(var_s):
+  return(jnp.mean(var_s, axis = -1) ** 2 / jnp.mean(var_s ** 2, axis = -1))
+dim_s_fct = jax.jit(dim_s_fct)
+
+# traces/attractor sizes
+def size_s_fct(var_s):
+  return(jnp.sum(var_s, axis = -1))
 
 # orientation similarity, tr(sqrt1 sqrt2)/std1/std2
-def ori_similarity_fct(cov_1, cov_2):
-  sqrt_cov_1 = pd_matrix_power_fct(cov_1, 0.5)
-  sqrt_cov_2 = pd_matrix_power_fct(cov_2, 0.5)
-  return(jnp.trace(sqrt_cov_1 @ sqrt_cov_2)
-         / jnp.sqrt(jnp.trace(cov_1)) / jnp.sqrt(jnp.trace(cov_2)))
-ori_similarity_fct = jax.jit(ori_similarity_fct)
-
-# matched
-def matched_cov_similarity_s_fct(cov_s_1, cov_s_2):
-  cov_shape = cov_s_1.shape
-  matched_shape = cov_shape[:-2]
-  matched_size = jnp.prod(jnp.asarray(matched_shape))
-  part_n = cov_shape[-1]
-  cov_s_1_reshaped = cov_s_1.reshape((matched_size, ) + (part_n, part_n))
-  cov_s_2_reshaped = cov_s_2.reshape((matched_size, ) + (part_n, part_n))
-  return(jnp.asarray([ori_similarity_fct(cov_s_1_reshaped[cov_idx],
-                                         cov_s_2_reshaped[cov_idx])
-                      for cov_idx in range(matched_size)]).reshape(matched_shape))
-#matched_cov_similarity_s_fct = jax.jit(matched_cov_similarity_s_fct)
-
-
-# covariance sizes
-# using traces (see writeup for justification)
-def cov_size_s_fct(cov_s):
-  return(jnp.trace(cov_s, axis1=-1, axis2=-2))
+def ori_similarity_s_fct(es_s_1, es_s_2, size_s_1, size_s_2):
+  std_s_1 = jnp.sqrt(es_s_1[0])
+  std_s_2 = jnp.sqrt(es_s_2[0])
+  rot_s = jnp.swapaxes(es_s_1[1], -1, -2) @ es_s_2[1]
+  return(jnp.einsum("...i, ...ij, ...ij, ...j",
+                    std_s_1, rot_s, rot_s, std_s_2,
+                    optimize = True)
+         / jnp.sqrt(size_s_1 * size_s_2))
+ori_similarity_s_fct = jax.jit(ori_similarity_s_fct)
 
 
 
