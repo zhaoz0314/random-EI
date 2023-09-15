@@ -1,7 +1,6 @@
 import jax # for jax.jit
 import jax.numpy as jnp
 import jax.random as jrandom
-import numpy as np
 import time
 # # allow double floats
 # import jax.config as jconfig
@@ -20,9 +19,9 @@ import time
 # sub population sizes
 def sub_part_n_s_fct(part_n, sub_part_r_s):
   # calculate rough numbers
-  sub_part_n_s = np.floor(part_n * sub_part_r_s)
+  sub_part_n_s = jnp.floor(part_n * sub_part_r_s)
   # in case the rounded numbers don't add up
-  sub_part_n_s[-1] = part_n - jnp.sum(sub_part_n_s[:-1])
+  sub_part_n_s = sub_part_n_s.at[-1].set(part_n - jnp.sum(sub_part_n_s[:-1]))
   return(sub_part_n_s.astype(int))
 # sub_part_n_s_fct = jax.jit(sub_part_n_s_fct)
 
@@ -240,7 +239,7 @@ def rk4_open_ode_segmenting_solver(velocity_fct, ext_input_fct, initial_conditio
                                                         temp_initial_condition,
                                                         time_interval_s[time_interval_idx], resolution)
     temp_initial_condition = position_s[time_interval_idx][:, -1]
-  return(position_s)
+  return(jnp.asarray(position_s))
 
 
 
@@ -254,8 +253,8 @@ def low_res_traj_s_fct(connectivity_s, wave_s, ext_connectivity_s, phase_s, init
   ext_connectivity_n = ext_connectivity_s.shape[0]
   phase_n = phase_s.shape[0]
   initial_condition_n = initial_condition_s.shape[0]
-  frame_n = ((jnp.sum(jnp.round((labeled_time_interval_s[0][1:, 1]
-                                 - labeled_time_interval_s[0][1:, 0])
+  frame_n = ((jnp.sum(jnp.round((labeled_time_interval_s[0][:, 1]
+                                 - labeled_time_interval_s[0][:, 0])
                                 * resolution))
               - 1) // frame_gap + 1).astype(int)
   part_n = initial_condition_s.shape[1]
@@ -266,34 +265,45 @@ def low_res_traj_s_fct(connectivity_s, wave_s, ext_connectivity_s, phase_s, init
         [initial_condition_n, "initial_condition_n"],
         sep = "\r\n")
   # initialize and loop through conditions
-  low_res_traj_s = np.zeros((connectivity_n, wave_n, ext_connectivity_n, phase_n,
-                             initial_condition_n,
-                             part_n, frame_n))
-  for connectivity_idx in range(connectivity_n):
-    connectivity_step_start = round(time.time())
-    for wave_idx in range(wave_n):
-      for ext_connectivity_idx in range(ext_connectivity_n):
-        for phase_idx in range(phase_n):
-          for initial_condition_idx in range(initial_condition_n):
-            low_res_traj_s[connectivity_idx, wave_idx, ext_connectivity_idx, phase_idx,
-                           initial_condition_idx
-                           ] = jnp.tanh(jnp.concatenate(
-                             rk4_open_ode_segmenting_solver(
-                               lambda position: almlin_velocity_fct(
-                                 connectivity_s[connectivity_idx], position),
-                               lambda time: sin_ext_input_fct(
-                                 wave_s[wave_idx],
-                                 ext_connectivity_s[ext_connectivity_idx],
-                                 phase_s[phase_idx],
-                                 labeled_time_interval_s, time), 
-                               initial_condition_s[initial_condition_idx],
-                               labeled_time_interval_s[0],
-                               resolution)[1:], axis = -1)[:, ::frame_gap])
-    connectivity_step_end = round(time.time())
-    print(connectivity_idx,
-          "{:.2f} mins".format((connectivity_step_end - connectivity_step_start)
-                               / 60),
-          sep = ",")
+  low_res_traj_s = jnp.zeros((connectivity_n, wave_n, ext_connectivity_n, phase_n,
+                     initial_condition_n,
+                     part_n, frame_n))
+  connectivity_step_start = round(time.time())
+  # define the body function for connectivity_idx for printing times
+  def connectivity_step_forward(connectivity_idx, low_res_traj_s_fc):
+    return(
+      jax.lax.fori_loop(
+        0, wave_n, lambda wave_idx, low_res_traj_s_fw:
+        jax.lax.fori_loop(
+          0, ext_connectivity_n, lambda ext_connectivity_idx, low_res_traj_s_fe:
+          jax.lax.fori_loop(
+            0, phase_n, lambda phase_idx, low_res_traj_s_fp:
+            jax.lax.fori_loop(
+              0, initial_condition_n, lambda initial_condition_idx, low_res_traj_s_fi:
+              low_res_traj_s_fi.at[
+                connectivity_idx, wave_idx, ext_connectivity_idx, phase_idx,
+                initial_condition_idx].set(jnp.tanh(jnp.concatenate(
+                  rk4_open_ode_segmenting_solver(
+                    lambda position: almlin_velocity_fct(
+                      connectivity_s[connectivity_idx], position),
+                    lambda time: sin_ext_input_fct(
+                      wave_s[wave_idx],
+                      ext_connectivity_s[ext_connectivity_idx],
+                      phase_s[phase_idx],
+                      labeled_time_interval_s, time), 
+                    initial_condition_s[initial_condition_idx],
+                    labeled_time_interval_s[0],
+                    resolution), axis = -1)[:, ::frame_gap])),
+              low_res_traj_s_fp), low_res_traj_s_fe), low_res_traj_s_fw), low_res_traj_s_fc))
+  low_res_traj_s = jax.lax.fori_loop(0, 1,
+                                     connectivity_step_forward,
+                                     low_res_traj_s)
+  connectivity_step_end = round(time.time())
+  print("{} mins for each connectivity".format(
+  (connectivity_step_end - connectivity_step_start) / 60))
+  low_res_traj_s = jax.lax.fori_loop(1, connectivity_n,
+                                     connectivity_step_forward,
+                                     low_res_traj_s)
   return(low_res_traj_s)
 
 
@@ -357,29 +367,27 @@ es_s_fct = jax.jit(es_s_fct, static_argnums = (1,))
 
 # take leading pcs when within tolerance
 def es_s_thinner(es_s, dim_r, tolerance):
-  dim_n_full = es_s[0].shape[-1]
-  dim_n_thin = jnp.round(es_s[0].shape[-1] * dim_r).astype(int)
+  dim_n = jnp.round(es_s[0].shape[-1] * dim_r).astype(int)
   var_s_full = jnp.sum(es_s[0], axis = -1)
-  var_s_thin = jnp.sum(es_s[0][..., (dim_n_full - dim_n_thin):], axis = -1)
-  error_r_s = (var_s_full - var_s_thin) / var_s_full
-  if jnp.prod(error_r_s < tolerance):
-    thin_es_s = [es_s[0][..., (dim_n_full - dim_n_thin):],
-                 es_s[1][..., (dim_n_full - dim_n_thin):]]
+  var_s_thin = jnp.sum(es_s[0][..., :dim_n], axis = -1)
+  error_s = var_s_full - var_s_thin
+  tolerance_s = var_s_full * tolerance
+  if jnp.prod(error_s < tolerance_s):
+    thin_es_s = [es_s[0][..., :dim_n], es_s[1][..., :dim_n]]
   else:
-    print(
-      "error ({0:.4f}) exceeds tolerance ({1:.4f})".format(
-        jnp.max(error_r_s), jnp.min(tolerance)))
+    print("error ({0}) exceeds tolerance ({1})".format(jnp.mean(error_s),
+                                                       jnp.mean(tolerance_s)))
     thin_es_s = es_s
   return(thin_es_s)
 
 # participation ratios
-def dim_r_s_fct(var_s):
+def dim_s_fct(var_s):
   return(jnp.mean(var_s, axis = -1) ** 2 / jnp.mean(var_s ** 2, axis = -1))
-dim_r_s_fct = jax.jit(dim_r_s_fct)
+dim_s_fct = jax.jit(dim_s_fct)
 
 # traces/attractor sizes
 def size_s_fct(var_s):
-  return(jnp.mean(var_s, axis = -1))
+  return(jnp.sum(var_s, axis = -1))
 
 # orientation similarity, tr(sqrt1 sqrt2)/std1/std2
 def ori_similarity_s_fct(es_s_1, es_s_2, size_s_1, size_s_2):
