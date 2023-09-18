@@ -189,6 +189,12 @@ sin_ext_input_fct = jax.jit(sin_ext_input_fct)
 
 
 # for solving ODEs
+# placeholder generator
+def traj_holder_fct():
+  step_n = jnp.round((time_interval[1] - time_interval[0]) * resolution
+                     + 1).astype(int)
+  position_s = jnp.zeros((part_n, step_n))
+
 # solver for autonomous/isolated ODEs
 def rk4_iso_ode_solver(velocity_fct, initial_condition, time_interval, resolution):
   # find the system size, step size, and step number
@@ -225,21 +231,6 @@ def rk4_open_ode_solver(velocity_fct, ext_input_fct, initial_condition,
   return(rk4_iso_ode_solver(four_net_velocity_fct, four_initial_condition,
                             time_interval, resolution)[1:])
 # output depends on shape
-
-# solver dealing with multiple intervals
-def rk4_open_ode_segmenting_solver(velocity_fct, ext_input_fct, initial_condition,
-                                   time_interval_s, resolution):
-  # initialize list for each entry (hopefully only) referring to an array
-  time_interval_n = time_interval_s.shape[0]
-  position_s = [0 for time_interval_idx in range(time_interval_n)]
-  # filling the list one by one and updating the initial condition
-  temp_initial_condition = initial_condition
-  for time_interval_idx in range(time_interval_n):
-    position_s[time_interval_idx] = rk4_open_ode_solver(velocity_fct, ext_input_fct,
-                                                        temp_initial_condition,
-                                                        time_interval_s[time_interval_idx], resolution)
-    temp_initial_condition = position_s[time_interval_idx][:, -1]
-  return(jnp.asarray(position_s))
 
 
 
@@ -367,27 +358,29 @@ es_s_fct = jax.jit(es_s_fct, static_argnums = (1,))
 
 # take leading pcs when within tolerance
 def es_s_thinner(es_s, dim_r, tolerance):
-  dim_n = jnp.round(es_s[0].shape[-1] * dim_r).astype(int)
+  dim_n_full = es_s[0].shape[-1]
+  dim_n_thin = jnp.round(es_s[0].shape[-1] * dim_r).astype(int)
   var_s_full = jnp.sum(es_s[0], axis = -1)
-  var_s_thin = jnp.sum(es_s[0][..., :dim_n], axis = -1)
-  error_s = var_s_full - var_s_thin
-  tolerance_s = var_s_full * tolerance
-  if jnp.prod(error_s < tolerance_s):
-    thin_es_s = [es_s[0][..., :dim_n], es_s[1][..., :dim_n]]
+  var_s_thin = jnp.sum(es_s[0][..., (dim_n_full - dim_n_thin):], axis = -1)
+  error_r_s = (var_s_full - var_s_thin) / var_s_full
+  if jnp.prod(error_r_s < tolerance):
+    thin_es_s = [es_s[0][..., (dim_n_full - dim_n_thin):],
+                 es_s[1][..., (dim_n_full - dim_n_thin):]]
   else:
-    print("error ({0}) exceeds tolerance ({1})".format(jnp.mean(error_s),
-                                                       jnp.mean(tolerance_s)))
+    print(
+      "error ({0:.4f}) exceeds tolerance ({1:.4f})".format(
+        jnp.max(error_r_s), jnp.min(tolerance)))
     thin_es_s = es_s
   return(thin_es_s)
 
 # participation ratios
-def dim_s_fct(var_s):
+def dim_r_s_fct(var_s):
   return(jnp.mean(var_s, axis = -1) ** 2 / jnp.mean(var_s ** 2, axis = -1))
-dim_s_fct = jax.jit(dim_s_fct)
+dim_r_s_fct = jax.jit(dim_r_s_fct)
 
 # traces/attractor sizes
 def size_s_fct(var_s):
-  return(jnp.sum(var_s, axis = -1))
+  return(jnp.mean(var_s, axis = -1))
 
 # orientation similarity, tr(sqrt1 sqrt2)/std1/std2
 def ori_similarity_s_fct(es_s_1, es_s_2, size_s_1, size_s_2):

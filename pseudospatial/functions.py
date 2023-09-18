@@ -18,11 +18,11 @@ import time
 
 # for obtaining conditions
 # sub population sizes
-def sub_part_n_s_fct(part_n, sub_part_r_s):
+def sub_part_n_s_fct(part_n_s, sub_part_r_s):
   # calculate rough numbers
-  sub_part_n_s = np.floor(part_n * sub_part_r_s)
+  sub_part_n_s = np.floor(jnp.swapaxes(jnp.atleast_2d(part_n_s), 0, 1) * sub_part_r_s)
   # in case the rounded numbers don't add up
-  sub_part_n_s[-1] = part_n - jnp.sum(sub_part_n_s[:-1])
+  sub_part_n_s[:, -1] = part_n_s - jnp.sum(sub_part_n_s[:, :-1], axis = -1)
   return(sub_part_n_s.astype(int))
 # sub_part_n_s_fct = jax.jit(sub_part_n_s_fct)
 
