@@ -1,7 +1,6 @@
 import jax # for jax.jit
 import jax.numpy as jnp
 import jax.random as jrandom
-import numpy as np
 import time
 # # allow double floats
 # import jax.config as jconfig
@@ -34,17 +33,19 @@ def sub_part_n_s_fct(part_n_s, sub_part_r_s):
 def ei_mean_balancer(ei_part_n_s, e_mean):
   return(jnp.tile(jnp.asarray([e_mean, - e_mean * ei_part_n_s[0] / ei_part_n_s[1]]), (2, 1)))
 
-# intensive K
+# intensive K # (unscaled mean, std) = (unscaled_strength, 0)
 def dense_bernoulli_parameter_s_fct(unscaled_mean, unscaled_std):
   in_r = 1 / (1 + unscaled_std ** 2 / unscaled_mean ** 2)
-  unscaled_str = unscaled_mean / jnp.sqrt(in_r)
-  return([unscaled_str, in_r]) # unscaled mean, std = unscaled_str, 0
+  unscaled_strength = unscaled_mean / jnp.sqrt(in_r)
+  return([unscaled_strength, in_r])
 
-# # extensive K
-# def sparse_bernoulli_parameter_s_fct(unscaled_mean, unscaled_std, part_n):
-#   in_r = 1 / (1 + unscaled_std ** 2 / unscaled_mean ** 2)
-#   unscaled_str = unscaled_mean / jnp.sqrt(in_r)
-#   return([unscaled_str, in_r]) # unscaled mean, std = unscaled_str, 0
+# extensive K # (unscaled mean, std) = (unscaled_strength, 0) # in_r = in_n / part_n
+def sparse_bernoulli_parameter_s_fct(unscaled_mean, unscaled_std):
+  if unscaled_mean == 0:
+    unscaled_strength = unscaled_std
+  else:
+    print("unscaled_mean not 0")
+  return(unscaled_strength)
 
 # connectivities
 def connectivity_s_generator(sub_part_n_s, unscaled_mean, unscaled_std,
@@ -163,8 +164,9 @@ def initial_condition_s_generator(part_n, mean, cov, initial_condition_n,
 # for describing the system
 # # nonlinearity
 # def nonlinearity(preactivation, bias):
-#   return((preactivation <= 0).astype(jnp.float32) * bias * jnp.tanh(preactivation / bias)
-#          + (preactivation > 0).astype(jnp.float32) * (2 - bias) * jnp.tanh(preactivation / (2 - bias)))
+#   return(
+#     (preactivation <= 0).astype(jnp.float32) * bias * jnp.tanh(preactivation / bias)
+#     + (preactivation > 0).astype(jnp.float32) * (2 - bias) * jnp.tanh(preactivation / (2 - bias)))
 # nonlinearity = jax.jit(nonlinearity)
 
 # velocity as a function for almost linear networks
@@ -194,111 +196,129 @@ sin_ext_input_fct = jax.jit(sin_ext_input_fct)
 
 
 # for solving ODEs
-# solver for autonomous/isolated ODEs
-def rk4_iso_ode_solver(velocity_fct, initial_condition, time_interval, resolution):
-  # find the system size, step size, and step number
-  part_n = initial_condition.shape[0]
-  step_size = 1 / resolution
+# array for containing trajectories
+def traj_initializer(initial_condition, time_interval, resolution):
   step_n = jnp.round((time_interval[1] - time_interval[0]) * resolution
                      + 1).astype(int)
+  traj_holder = jnp.zeros(initial_condition.shape + (step_n, )).at[..., 0].set(initial_condition)
+  return(traj_holder)
+
+# solver for possibly non-autonomous ODEs
+def rk4_ode_solver(velocity_fct, ext_input_fct, traj_holder, time_interval, resolution):
+  # find the system size, step size, and step number
+  step_size = 1 / resolution
+  step_n = traj_holder.shape[-1]
   # evolving positions
-  position_s = jnp.zeros((part_n, step_n)).at[:, 0].set(initial_condition)
   def step_forward(step_idx, position_s):
-    previous_position = position_s[:, step_idx - 1]
-    correction_0 = velocity_fct(previous_position)
-    correction_1 = velocity_fct(previous_position + step_size * correction_0 / 2)
-    correction_2 = velocity_fct(previous_position + step_size * correction_1 / 2)
-    correction_3 = velocity_fct(previous_position + step_size * correction_2)
-    next_position = previous_position + step_size * (correction_0 / 6 + correction_1 / 3
-                                                 + correction_2 / 3 + correction_3 / 6)
-    return(position_s.at[:, step_idx].set(next_position))
-  position_s = jax.lax.fori_loop(1, step_n, step_forward, position_s)[:, 1:]
+    previous_time = time_interval[0] + step_size * (step_idx - 1)
+    previous_position = position_s[..., step_idx - 1]
+    velocity_0 = (velocity_fct(previous_position)
+                  + ext_input_fct(previous_time))
+    velocity_1 = (velocity_fct(previous_position + step_size * velocity_0 / 2)
+                  + ext_input_fct(previous_time + step_size / 2))
+    velocity_2 = (velocity_fct(previous_position + step_size * velocity_1 / 2)
+                  + ext_input_fct(previous_time + step_size / 2))
+    velocity_3 = (velocity_fct(previous_position + step_size * velocity_2)
+                  + ext_input_fct(previous_time + step_size))
+    next_position = previous_position + step_size * (velocity_0 / 6 + velocity_1 / 3
+                                                 + velocity_2 / 3 + velocity_3 / 6)
+    return(position_s.at[..., step_idx].set(next_position))
+  position_s = jax.lax.fori_loop(1, step_n, step_forward, traj_holder)[..., 1:]
   return(position_s)
-# cannot be jitted since output depends on shape, but the evolution is compiled in fori
-
-# nonautonomous/open ODE solver by reducing to autonomous
-def rk4_open_ode_solver(velocity_fct, ext_input_fct, initial_condition,
-                        time_interval, resolution):
-  # combine self velocity and external input and add time
-  def four_net_velocity_fct(four_position):
-    return(jnp.concatenate([jnp.atleast_1d(1.),
-                            velocity_fct(four_position[1:]) + ext_input_fct(four_position[0])]))
-  four_net_velocity_fct = jax.jit(four_net_velocity_fct) # necessary, otherwise 60x longer
-  # add time to initial condition
-  four_initial_condition = jnp.concatenate([jnp.atleast_1d(time_interval[0]),
-                                            initial_condition])
-  return(rk4_iso_ode_solver(four_net_velocity_fct, four_initial_condition,
-                            time_interval, resolution)[1:])
-# output depends on shape
-
-# solver dealing with multiple intervals
-def rk4_open_ode_segmenting_solver(velocity_fct, ext_input_fct, initial_condition,
-                                   time_interval_s, resolution):
-  # initialize list for each entry (hopefully only) referring to an array
-  time_interval_n = time_interval_s.shape[0]
-  position_s = [0 for time_interval_idx in range(time_interval_n)]
-  # filling the list one by one and updating the initial condition
-  temp_initial_condition = initial_condition
-  for time_interval_idx in range(time_interval_n):
-    position_s[time_interval_idx] = rk4_open_ode_solver(velocity_fct, ext_input_fct,
-                                                        temp_initial_condition,
-                                                        time_interval_s[time_interval_idx], resolution)
-    temp_initial_condition = position_s[time_interval_idx][:, -1]
-  return(position_s)
+# rk4_ode_solver = jax.jit(rk4_ode_solver)
 
 
 
-# getting trajectories
-# prints the format
-def low_res_traj_s_fct(connectivity_s, wave_s, ext_connectivity_s, phase_s, initial_condition_s,
-                       labeled_time_interval_s, resolution, frame_gap):
-  # find condition numbers and system size
+# getting stats
+# find arbitrary stats for each condition
+def stat_s_fct(connectivity_s, wave_s, ext_connectivity_s, phase_s,
+               initial_condition_s,
+               labeled_time_interval_s, resolution,
+               stat_s_fct, stat_s_holder):
+  # find condition numbers
   connectivity_n = connectivity_s.shape[0]
   wave_n = wave_s.shape[0]
   ext_connectivity_n = ext_connectivity_s.shape[0]
   phase_n = phase_s.shape[0]
   initial_condition_n = initial_condition_s.shape[0]
-  frame_n = ((jnp.sum(jnp.round((labeled_time_interval_s[0][1:, 1]
-                                 - labeled_time_interval_s[0][1:, 0])
-                                * resolution))
-              - 1) // frame_gap + 1).astype(int)
-  part_n = initial_condition_s.shape[1]
+  condition_n_s = jnp.asarray([connectivity_n, wave_n, ext_connectivity_n, phase_n,
+                               initial_condition_n])
+  condition_n = jnp.prod(condition_n_s)
+  condition_s = [connectivity_s, wave_s, ext_connectivity_s, phase_s,
+                 initial_condition_s]
+  # find stat number
+  stat_n = len(stat_s_holder)
+  # print
   print([connectivity_n, "connectivity_n"],
         [wave_n, "wave_n"],
         [ext_connectivity_n, "ext_connectivity_n"],
         [phase_n, "phase_n"],
         [initial_condition_n, "initial_condition_n"],
         sep = "\r\n")
-  # initialize and loop through conditions
-  low_res_traj_s = np.zeros((connectivity_n, wave_n, ext_connectivity_n, phase_n,
-                             initial_condition_n,
-                             part_n, frame_n))
-  for connectivity_idx in range(connectivity_n):
-    connectivity_step_start = round(time.time())
-    for wave_idx in range(wave_n):
-      for ext_connectivity_idx in range(ext_connectivity_n):
-        for phase_idx in range(phase_n):
-          for initial_condition_idx in range(initial_condition_n):
-            low_res_traj_s[connectivity_idx, wave_idx, ext_connectivity_idx, phase_idx,
-                           initial_condition_idx
-                           ] = jnp.tanh(jnp.concatenate(
-                             rk4_open_ode_segmenting_solver(
-                               lambda position: almlin_velocity_fct(
-                                 connectivity_s[connectivity_idx], position),
-                               lambda time: sin_ext_input_fct(
-                                 wave_s[wave_idx],
-                                 ext_connectivity_s[ext_connectivity_idx],
-                                 phase_s[phase_idx],
-                                 labeled_time_interval_s, time), 
-                               initial_condition_s[initial_condition_idx],
-                               labeled_time_interval_s[0],
-                               resolution)[1:], axis = -1)[:, ::frame_gap])
-    connectivity_step_end = round(time.time())
-    print(connectivity_idx,
-          "{:.2f} mins".format((connectivity_step_end - connectivity_step_start)
-                               / 60),
-          sep = ",")
-  return(low_res_traj_s)
+  print("{} stats".format(stat_n))
+  # define body function (traj holder created outside to avoid jit)
+  joined_time_interval = jnp.asarray([labeled_time_interval_s[0][0,0],
+                                      labeled_time_interval_s[0][-1,1]])
+  temp_traj_holder = traj_initializer(initial_condition_s[0], joined_time_interval, resolution)
+  def stat_s_updater(condition_idx, stat_s_with_condition_s):
+    # unpack second variable
+    [stat_s, condition_s] = stat_s_with_condition_s
+    [connectivity_s, wave_s, ext_connectivity_s, phase_s,
+     initial_condition_s] = condition_s
+    connectivity_n = connectivity_s.shape[0]
+    wave_n = wave_s.shape[0]
+    ext_connectivity_n = ext_connectivity_s.shape[0]
+    phase_n = phase_s.shape[0]
+    initial_condition_n = initial_condition_s.shape[0]
+    condition_n_s = jnp.asarray([connectivity_n, wave_n, ext_connectivity_n, phase_n,
+                                 initial_condition_n])
+    # find condition indices
+    unraveled_idx = jnp.unravel_index(condition_idx, condition_n_s)
+    # simulate traj
+    temp_traj = temp_traj_holder.at[..., 0].set(initial_condition_s[unraveled_idx[4]])
+    temp_traj = jnp.tanh(rk4_ode_solver(
+      lambda position:
+      almlin_velocity_fct(connectivity_s[unraveled_idx[0]], position),
+      lambda time:
+      sin_ext_input_fct(
+        wave_s[unraveled_idx[1]], ext_connectivity_s[unraveled_idx[2]], phase_s[unraveled_idx[3]],
+        labeled_time_interval_s, time),
+      temp_traj,
+      joined_time_interval, resolution))
+    # find stats
+    temp_stat_s = stat_s_fct(temp_traj)
+    # fill in stats using condition indices
+    for stat_idx in range(stat_n):
+      stat_s[stat_idx] = stat_s[stat_idx].at[unraveled_idx].set(temp_stat_s[stat_idx])
+    return([stat_s, condition_s])
+  # run for one connectivity after compilation, time it, and print expected time
+  stat_s = jax.lax.fori_loop(0, 1,
+                             stat_s_updater, [stat_s_holder, condition_s])[0]
+  start_time = round(time.time())
+  stat_s = jax.lax.fori_loop(1, 1 + initial_condition_n,
+                             stat_s_updater, [stat_s, condition_s])[0]
+  end_time = round(time.time())
+  print("expecting {:.2f} mins".format(
+    (end_time - start_time) * condition_n / initial_condition_n / 60))
+  # run the rest
+  stat_s = jax.lax.fori_loop(1 + initial_condition_n, condition_n,
+                             stat_s_updater, [stat_s, condition_s])[0]
+  return(stat_s)
+
+
+
+# low res trajs
+# low res trajs holder
+def low_res_traj_s_initializer(condition_n_s, part_n, time_interval_s, resolution, frame_gap):
+  frame_n = ((jnp.sum(jnp.round((time_interval_s[:, 1]
+                                 - time_interval_s[:, 0])
+                                * resolution))
+              - 1) // frame_gap + 1).astype(int)
+  return([jnp.zeros(tuple(condition_n_s) + (part_n, frame_n))])
+
+# low res traj function
+def low_res_traj_fct(traj):
+  return([traj[..., ::frame_gap]])
 
 
 
@@ -339,6 +359,16 @@ def matched_correlation_fct(traj_s_1, traj_s_2, mean_s_1, mean_s_2):
   # normalize by the number of terms
   return(convolved_array / (jnp.arange(frame_n)[::-1] + 1))
 matched_correlation_fct = jax.jit(matched_correlation_fct)
+
+# means and covs holder
+def mean_cov_s_initializer(condition_n_s, part_n):
+  return([jnp.zeros(tuple(condition_n_s) + (part_n, )),
+          jnp.zeros(tuple(condition_n_s) + (part_n, part_n))])
+
+# mean cov fct
+def mean_cov_fct(traj):
+  mean = mean_s_fct(traj)
+  return([mean, cov_s_fct(traj, mean)])
 
 
 
