@@ -317,7 +317,7 @@ def low_res_traj_s_initializer(condition_n_s, part_n, time_interval_s, resolutio
   return([jnp.zeros(tuple(condition_n_s) + (part_n, frame_n))])
 
 # low res traj function
-def low_res_traj_fct(traj):
+def low_res_traj_fct(traj, frame_gap):
   return([traj[..., ::frame_gap]])
 
 
