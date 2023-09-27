@@ -417,14 +417,104 @@ def size_s_fct(var_s):
 
 # orientation similarity, tr(sqrt1 sqrt2)/std1/std2
 def ori_similarity_s_fct(es_s_1, es_s_2, size_s_1, size_s_2):
+  part_n = es_s_1[0].shape[-1]
   std_s_1 = jnp.sqrt(es_s_1[0])
   std_s_2 = jnp.sqrt(es_s_2[0])
   rot_s = jnp.swapaxes(es_s_1[1], -1, -2) @ es_s_2[1]
   return(jnp.einsum("...i, ...ij, ...ij, ...j",
                     std_s_1, rot_s, rot_s, std_s_2,
                     optimize = True)
-         / jnp.sqrt(size_s_1 * size_s_2))
+         / jnp.sqrt(size_s_1 * size_s_2) / part_n)
 ori_similarity_s_fct = jax.jit(ori_similarity_s_fct)
+
+
+
+# pr tr os at multiple Ts
+# initialize
+def multi_len_pr_tr_os_s_initializer(condition_n_s, interval_len_s):
+  interval_len_n = interval_len_s.shape[0]
+  return([jnp.zeros(tuple(condition_n_s) + (interval_len_n, ))
+          for stat_idx in range(3)])
+
+# # pr tr os for nTs
+# def multi_len_pr_tr_os_s_fct(traj, short_interval_n_s):
+#   # find array size and initialize
+#   interval_len_n = short_interval_n_s.shape[0]
+#   multi_len_pr_tr_os_s_holder = [jnp.zeros((interval_len_n, )).at[-1].set(1)
+#                                  for stat_idx in range(3)]
+#   # find reference values
+#   long_mean = mean_s_fct(traj)
+#   long_cov = cov_s_fct(traj, long_mean)
+#   long_pc = es_s_fct(long_cov)
+#   long_pr = dim_r_s_fct(long_pc[0])
+#   long_tr = size_s_fct(long_pc[0])
+#   # find variables used in loop
+#   [part_n, step_n] = traj.shape
+#   short_step_n_s = step_n // short_interval_n_s
+#   def single_len_pr_tr_os_updater(interval_len_idx, multi_len_pr_tr_os_s): # _with_ref
+#     traj_reshaped = jnp.swapaxes(traj.reshape(part_n,
+#                                               short_interval_n_s[interval_len_idx],
+#                                               short_step_n_s[interval_len_idx]),
+#                                  0, 1)
+#     temp_short_mean_s = mean_s_fct(traj)
+#     temp_short_cov_s = cov_s_fct(traj, temp_short_mean_s)
+#     temp_short_pc_s = es_s_fct(temp_short_cov_s)
+#     temp_short_pr = jnp.mean(dim_r_s_fct(temp_short_pc_s[0]))
+#     temp_short_tr_s = size_s_fct(temp_short_pc_s[0])
+#     temp_short_tr = jnp.mean(temp_short_tr_s)
+#     temp_short_os = jnp.mean(ori_similarity_s_fct(long_pc, temp_short_pc_s,
+#                                                   long_tr, temp_short_tr_s))
+#     multi_len_pr_tr_os_s = [
+#       multi_len_pr_tr_os_s[0].at[interval_len_idx].set(temp_short_pr),
+#       multi_len_pr_tr_os_s[1].at[interval_len_idx].set(temp_short_tr),
+#       multi_len_pr_tr_os_s[2].at[interval_len_idx].set(temp_short_os)]
+#     return(multi_len_pr_tr_os_s)
+#   multi_len_pr_tr_os_s = jax.lax.fori_loop(0, interval_len_n - 1,
+#                                            single_len_pr_tr_os_updater,
+#                                            multi_len_pr_tr_os_s_holder)
+#   return(multi_len_pr_tr_os_s)
+
+# pr tr os for nTs
+def multi_len_pr_tr_os_s_fct(traj, short_interval_n_s):
+  # find array size and initialize
+  interval_len_n = short_interval_n_s.shape[0]
+  multi_len_pr_tr_os_s_holder = [jnp.zeros((interval_len_n, )).at[-1].set(1)
+                                 for stat_idx in range(3)]
+  # find reference values
+  long_mean = mean_s_fct(traj)
+  long_cov = cov_s_fct(traj, long_mean)
+  long_pc = es_s_fct(long_cov)
+  long_pr = dim_r_s_fct(long_pc[0])
+  long_tr = size_s_fct(long_pc[0])
+  # find variables used in loop
+  [part_n, step_n] = traj.shape
+  short_step_n_s = step_n // short_interval_n_s
+  def single_len_pr_tr_os_updater(interval_len_idx, multi_len_pr_tr_os_s): # _with_ref
+    traj_reshaped = jnp.zeros((short_interval_n_s[interval_len_idx],
+                               part_n,
+                               short_step_n_s[interval_len_idx]))
+    traj_reshaped = jax.lax.fori_loop(0, short_interval_n_s[interval_len_idx],
+                                      lambda interval_len_idx:
+                                      traj_reshaped.at[interval_len_idx
+                                                       ].set(traj[:, (interval_len_idx * short_step_n_s[interval_len_idx]):((interval_len_idx + 1) * short_step_n_s[interval_len_idx])]),
+                                      traj_reshaped)
+    temp_short_mean_s = mean_s_fct(traj)
+    temp_short_cov_s = cov_s_fct(traj, temp_short_mean_s)
+    temp_short_pc_s = es_s_fct(temp_short_cov_s)
+    temp_short_pr = jnp.mean(dim_r_s_fct(temp_short_pc_s[0]))
+    temp_short_tr_s = size_s_fct(temp_short_pc_s[0])
+    temp_short_tr = jnp.mean(temp_short_tr_s)
+    temp_short_os = jnp.mean(ori_similarity_s_fct(long_pc, temp_short_pc_s,
+                                                  long_tr, temp_short_tr_s))
+    multi_len_pr_tr_os_s = [
+      multi_len_pr_tr_os_s[0].at[interval_len_idx].set(temp_short_pr),
+      multi_len_pr_tr_os_s[1].at[interval_len_idx].set(temp_short_tr),
+      multi_len_pr_tr_os_s[2].at[interval_len_idx].set(temp_short_os)]
+    return(multi_len_pr_tr_os_s)
+  multi_len_pr_tr_os_s = jax.lax.fori_loop(0, interval_len_n - 1,
+                                           single_len_pr_tr_os_updater,
+                                           multi_len_pr_tr_os_s_holder)
+  return(multi_len_pr_tr_os_s)
 
 
 
