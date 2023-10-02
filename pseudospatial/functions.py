@@ -153,10 +153,10 @@ def phase_s_generator(ext_part_n, phase_n,
           key])
 
 # initial conditions
-def initial_condition_s_generator(part_n, mean, cov, initial_condition_n,
-                                  key = jnp.array([0, 0], dtype = jnp.uint32)):
+def init_condition_s_generator(part_n, mean, cov, init_condition_n,
+                               key = jnp.array([0, 0], dtype = jnp.uint32)):
   [key, subkey] = jrandom.split(key)
-  return([jrandom.multivariate_normal(subkey, mean, cov, (initial_condition_n, )),
+  return([jrandom.multivariate_normal(subkey, mean, cov, (init_condition_n, )),
           key])
 
 
@@ -197,10 +197,10 @@ sin_ext_input_fct = jax.jit(sin_ext_input_fct)
 
 # for solving ODEs
 # array for containing trajectories
-def traj_initializer(initial_condition, time_interval, resolution):
+def traj_initializer(init_condition, time_interval, resolution):
   step_n = jnp.round((time_interval[1] - time_interval[0]) * resolution
                      + 1).astype(int)
-  traj_holder = jnp.zeros(initial_condition.shape + (step_n, )).at[..., 0].set(initial_condition)
+  traj_holder = jnp.zeros(init_condition.shape + (step_n, )).at[..., 0].set(init_condition)
   return(traj_holder)
 
 # solver for possibly non-autonomous ODEs
@@ -232,7 +232,7 @@ def rk4_ode_solver(velocity_fct, ext_input_fct, traj_holder, time_interval, reso
 # getting stats
 # find arbitrary stats for each condition
 def stat_s_fct(connectivity_s, wave_s, ext_connectivity_s, phase_s,
-               initial_condition_s,
+               init_condition_s,
                labeled_time_interval_s, resolution,
                stat_s_fct, stat_s_holder):
   # find condition numbers
@@ -240,12 +240,12 @@ def stat_s_fct(connectivity_s, wave_s, ext_connectivity_s, phase_s,
   wave_n = wave_s.shape[0]
   ext_connectivity_n = ext_connectivity_s.shape[0]
   phase_n = phase_s.shape[0]
-  initial_condition_n = initial_condition_s.shape[0]
+  init_condition_n = init_condition_s.shape[0]
   condition_n_s = jnp.asarray([connectivity_n, wave_n, ext_connectivity_n, phase_n,
-                               initial_condition_n])
+                               init_condition_n])
   condition_n = jnp.prod(condition_n_s)
   condition_s = [connectivity_s, wave_s, ext_connectivity_s, phase_s,
-                 initial_condition_s]
+                 init_condition_s]
   # find stat number
   stat_n = len(stat_s_holder)
   # print
@@ -253,29 +253,29 @@ def stat_s_fct(connectivity_s, wave_s, ext_connectivity_s, phase_s,
         [wave_n, "wave_n"],
         [ext_connectivity_n, "ext_connectivity_n"],
         [phase_n, "phase_n"],
-        [initial_condition_n, "initial_condition_n"],
+        [init_condition_n, "init_condition_n"],
         sep = "\r\n")
   print("{} stats".format(stat_n))
   # define body function (traj holder created outside to avoid jit)
   joined_time_interval = jnp.asarray([labeled_time_interval_s[0][0,0],
                                       labeled_time_interval_s[0][-1,1]])
-  temp_traj_holder = traj_initializer(initial_condition_s[0], joined_time_interval, resolution)
+  temp_traj_holder = traj_initializer(init_condition_s[0], joined_time_interval, resolution)
   def stat_s_updater(condition_idx, stat_s_with_condition_s):
     # unpack second variable
     [stat_s, condition_s] = stat_s_with_condition_s
     [connectivity_s, wave_s, ext_connectivity_s, phase_s,
-     initial_condition_s] = condition_s
+     init_condition_s] = condition_s
     connectivity_n = connectivity_s.shape[0]
     wave_n = wave_s.shape[0]
     ext_connectivity_n = ext_connectivity_s.shape[0]
     phase_n = phase_s.shape[0]
-    initial_condition_n = initial_condition_s.shape[0]
+    init_condition_n = init_condition_s.shape[0]
     condition_n_s = jnp.asarray([connectivity_n, wave_n, ext_connectivity_n, phase_n,
-                                 initial_condition_n])
+                                 init_condition_n])
     # find condition indices
     unraveled_idx = jnp.unravel_index(condition_idx, condition_n_s)
     # simulate traj
-    temp_traj = temp_traj_holder.at[..., 0].set(initial_condition_s[unraveled_idx[4]])
+    temp_traj = temp_traj_holder.at[..., 0].set(init_condition_s[unraveled_idx[4]])
     temp_traj = jnp.tanh(rk4_ode_solver(
       lambda position:
       almlin_velocity_fct(connectivity_s[unraveled_idx[0]], position),
@@ -295,13 +295,13 @@ def stat_s_fct(connectivity_s, wave_s, ext_connectivity_s, phase_s,
   stat_s = jax.lax.fori_loop(0, 1,
                              stat_s_updater, [stat_s_holder, condition_s])[0]
   start_time = round(time.time())
-  stat_s = jax.lax.fori_loop(1, 1 + initial_condition_n,
+  stat_s = jax.lax.fori_loop(1, 1 + init_condition_n,
                              stat_s_updater, [stat_s, condition_s])[0]
   end_time = round(time.time())
   print("expecting {:.2f} mins".format(
-    (end_time - start_time) * condition_n / initial_condition_n / 60))
+    (end_time - start_time) * condition_n / init_condition_n / 60))
   # run the rest
-  stat_s = jax.lax.fori_loop(1 + initial_condition_n, condition_n,
+  stat_s = jax.lax.fori_loop(1 + init_condition_n, condition_n,
                              stat_s_updater, [stat_s, condition_s])[0]
   return(stat_s)
 
@@ -430,91 +430,142 @@ ori_similarity_s_fct = jax.jit(ori_similarity_s_fct)
 
 
 # pr tr os at multiple Ts
+# find sampling separation
+def samp_separation_fct(interval_len, resolution,
+                        window_len_s, frame_n_threshold,
+                        samp_n_limit):
+  min_window_len = jnp.min(window_len_s)
+  min_frame_n = (min_window_len * resolution)
+  if min_frame_n > frame_n_threshold:
+    step_n = interval_len * resolution
+    samp_n = jnp.minimum((interval_len / 2 / min_window_len + 1
+                          # have an additional sample for more samples?
+                          + 1),
+                         samp_n_limit)
+    output = jnp.floor(step_n / samp_n).astype(int)
+  else:
+    print(
+      "frame number ({0:.1f}) lower than required ({1:})".format(
+        min_frame_n, frame_n_threshold))  
+  return(output)
+
 # initialize
-def multi_len_pr_tr_os_s_initializer(condition_n_s, interval_len_s):
-  interval_len_n = interval_len_s.shape[0]
-  return([jnp.zeros(tuple(condition_n_s) + (interval_len_n, ))
+def multi_len_pr_tr_os_s_initializer(condition_n_s, window_len_s):
+  window_len_n = window_len_s.shape[0]
+  return([jnp.zeros(tuple(condition_n_s) + (window_len_n + 1, ))
           for stat_idx in range(3)])
 
-# # pr tr os for nTs
-# def multi_len_pr_tr_os_s_fct(traj, short_interval_n_s):
-#   # find array size and initialize
-#   interval_len_n = short_interval_n_s.shape[0]
-#   multi_len_pr_tr_os_s_holder = [jnp.zeros((interval_len_n, )).at[-1].set(1)
-#                                  for stat_idx in range(3)]
-#   # find reference values
-#   long_mean = mean_s_fct(traj)
-#   long_cov = cov_s_fct(traj, long_mean)
-#   long_pc = es_s_fct(long_cov)
-#   long_pr = dim_r_s_fct(long_pc[0])
-#   long_tr = size_s_fct(long_pc[0])
-#   # find variables used in loop
-#   [part_n, step_n] = traj.shape
-#   short_step_n_s = step_n // short_interval_n_s
-#   def single_len_pr_tr_os_updater(interval_len_idx, multi_len_pr_tr_os_s): # _with_ref
-#     traj_reshaped = jnp.swapaxes(traj.reshape(part_n,
-#                                               short_interval_n_s[interval_len_idx],
-#                                               short_step_n_s[interval_len_idx]),
-#                                  0, 1)
-#     temp_short_mean_s = mean_s_fct(traj)
-#     temp_short_cov_s = cov_s_fct(traj, temp_short_mean_s)
-#     temp_short_pc_s = es_s_fct(temp_short_cov_s)
-#     temp_short_pr = jnp.mean(dim_r_s_fct(temp_short_pc_s[0]))
-#     temp_short_tr_s = size_s_fct(temp_short_pc_s[0])
-#     temp_short_tr = jnp.mean(temp_short_tr_s)
-#     temp_short_os = jnp.mean(ori_similarity_s_fct(long_pc, temp_short_pc_s,
-#                                                   long_tr, temp_short_tr_s))
-#     multi_len_pr_tr_os_s = [
-#       multi_len_pr_tr_os_s[0].at[interval_len_idx].set(temp_short_pr),
-#       multi_len_pr_tr_os_s[1].at[interval_len_idx].set(temp_short_tr),
-#       multi_len_pr_tr_os_s[2].at[interval_len_idx].set(temp_short_os)]
-#     return(multi_len_pr_tr_os_s)
-#   multi_len_pr_tr_os_s = jax.lax.fori_loop(0, interval_len_n - 1,
-#                                            single_len_pr_tr_os_updater,
-#                                            multi_len_pr_tr_os_s_holder)
-#   return(multi_len_pr_tr_os_s)
-
 # pr tr os for nTs
-def multi_len_pr_tr_os_s_fct(traj, short_interval_n_s):
-  # find array size and initialize
-  interval_len_n = short_interval_n_s.shape[0]
-  multi_len_pr_tr_os_s_holder = [jnp.zeros((interval_len_n, )).at[-1].set(1)
-                                 for stat_idx in range(3)]
-  # find reference values
-  long_mean = mean_s_fct(traj)
-  long_cov = cov_s_fct(traj, long_mean)
-  long_pc = es_s_fct(long_cov)
-  long_pr = dim_r_s_fct(long_pc[0])
-  long_tr = size_s_fct(long_pc[0])
-  # find variables used in loop
+def multi_len_pr_tr_os_s_fct(traj, resolution,
+                             window_len_s, samp_separation,
+                             kernel_power = 2):
+  # find numbers
   [part_n, step_n] = traj.shape
-  short_step_n_s = step_n // short_interval_n_s
-  def single_len_pr_tr_os_updater(interval_len_idx, multi_len_pr_tr_os_s): # _with_ref
-    traj_reshaped = jnp.zeros((short_interval_n_s[interval_len_idx],
-                               part_n,
-                               short_step_n_s[interval_len_idx]))
-    traj_reshaped = jax.lax.fori_loop(0, short_interval_n_s[interval_len_idx],
-                                      lambda interval_len_idx:
-                                      traj_reshaped.at[interval_len_idx
-                                                       ].set(traj[:, (interval_len_idx * short_step_n_s[interval_len_idx]):((interval_len_idx + 1) * short_step_n_s[interval_len_idx])]),
-                                      traj_reshaped)
-    temp_short_mean_s = mean_s_fct(traj)
-    temp_short_cov_s = cov_s_fct(traj, temp_short_mean_s)
-    temp_short_pc_s = es_s_fct(temp_short_cov_s)
-    temp_short_pr = jnp.mean(dim_r_s_fct(temp_short_pc_s[0]))
-    temp_short_tr_s = size_s_fct(temp_short_pc_s[0])
-    temp_short_tr = jnp.mean(temp_short_tr_s)
-    temp_short_os = jnp.mean(ori_similarity_s_fct(long_pc, temp_short_pc_s,
-                                                  long_tr, temp_short_tr_s))
+  kernel_half_step_n = step_n // 4
+  window_len_n = window_len_s.shape[0]
+  samp_n = (step_n - 1) // samp_separation + 1
+  # half of the window as the kernel std, then normalize
+  kernel_s = jnp.exp(
+    -((jnp.arange(-kernel_half_step_n,
+                  kernel_half_step_n) / resolution) ** kernel_power
+      / (2 * jnp.expand_dims(window_len_s / 2, 1) ** kernel_power)))
+  kernel_s = kernel_s / jnp.sum(kernel_s, axis = -1, keepdims = True)
+  # find reference values (window at full length)
+  full_mean = mean_s_fct(traj)
+  full_cov = cov_s_fct(traj, full_mean)
+  full_pc = es_s_fct(full_cov)
+  full_pr = dim_r_s_fct(full_pc[0])
+  full_tr = size_s_fct(full_pc[0])
+  # find fluctuations first
+  # local fluctuations may shift windowed covs
+  fluct = traj - jnp.expand_dims(full_mean, -1)
+  # initialize output
+  multi_len_pr_tr_os_s = [
+    jnp.zeros((window_len_n + 1, )).at[-1].set(full_pr),
+    jnp.zeros((window_len_n + 1, )).at[-1].set(full_tr),
+    jnp.zeros((window_len_n + 1, )).at[-1].set(1)]
+  def single_len_pr_tr_os_updater(window_len_idx, multi_len_pr_tr_os_s):
+    temp_windowed_fluct_s = jax.lax.fori_loop(
+      0, samp_n,
+      lambda samp_idx, windowed_fluct_s:
+      windowed_fluct_s.at[
+        samp_idx].set(
+          jax.lax.dynamic_slice(traj,
+                                (0, window_len_idx * samp_separation),
+                                (part_n, kernel_half_step_n * 2))
+          * kernel_s[window_len_idx]),
+      jnp.zeros((samp_n, part_n, kernel_half_step_n * 2)))
+    temp_cov_s = cov_s_fct(temp_windowed_fluct_s, jnp.zeros((part_n, )))
+    temp_pc_s = es_s_fct(temp_cov_s)
+    temp_pr = jnp.mean(dim_r_s_fct(temp_pc_s[0]))
+    temp_tr_s = size_s_fct(temp_pc_s[0])
+    temp_tr = jnp.mean(temp_tr_s)
+    temp_os = jnp.mean(ori_similarity_s_fct(full_pc, temp_pc_s,
+                                            full_tr, temp_tr_s))
     multi_len_pr_tr_os_s = [
-      multi_len_pr_tr_os_s[0].at[interval_len_idx].set(temp_short_pr),
-      multi_len_pr_tr_os_s[1].at[interval_len_idx].set(temp_short_tr),
-      multi_len_pr_tr_os_s[2].at[interval_len_idx].set(temp_short_os)]
+      multi_len_pr_tr_os_s[0].at[window_len_idx].set(temp_pr),
+      multi_len_pr_tr_os_s[1].at[window_len_idx].set(temp_tr),
+      multi_len_pr_tr_os_s[2].at[window_len_idx].set(temp_os)]
     return(multi_len_pr_tr_os_s)
-  multi_len_pr_tr_os_s = jax.lax.fori_loop(0, interval_len_n - 1,
+  multi_len_pr_tr_os_s = jax.lax.fori_loop(0, window_len_n,
                                            single_len_pr_tr_os_updater,
-                                           multi_len_pr_tr_os_s_holder)
+                                           multi_len_pr_tr_os_s)
   return(multi_len_pr_tr_os_s)
+multi_len_pr_tr_os_s_fct = jax.jit(multi_len_pr_tr_os_s_fct, static_argnums = (3, ))
+
+# ## pr tr os for nTs
+# #def multi_len_pr_tr_os_s_fct(traj, resolution,
+# #                             window_len_s, samp_separation,
+# #                             kernel_power = 2):
+# #  # find numbers
+# #  step_n = traj.shape[-1]
+# #  kernel_half_step_n = step_n // 4
+# #  window_len_n = window_len_s.shape[0]
+# #  # half of the window as the kernel std, then normalize
+# #  kernel_s = jnp.exp(
+# #    -((jnp.arange(-kernel_half_step_n,
+# #                  kernel_half_step_n) / resolution) ** kernel_power
+# #      / (2 * jnp.expand_dims(window_len_s / 2, 1) ** kernel_power)))
+# #  kernel_s = kernel_s / jnp.sum(kernel_s, axis = -1, keepdims = True)
+# #  # find reference values (window at full length)
+# #  full_mean = mean_s_fct(traj)
+# #  full_cov = cov_s_fct(traj, full_mean)
+# #  full_pc = es_s_fct(full_cov)
+# #  full_pr = dim_r_s_fct(full_pc[0])
+# #  full_tr = size_s_fct(full_pc[0])
+# #  # find Fourier transforms of cross fluctuations first
+# #  # local fluctuations may shift windowed covs
+# #  fluct = traj - jnp.expand_dims(full_mean, -1)
+# #  cross_fluct_ft = jnp.fft.rfft(
+# #    jnp.expand_dims(fluct, -2) * jnp.expand_dims(fluct, -3))
+# #  # initialize output
+# #  multi_len_pr_tr_os_s = [
+# #    jnp.zeros((window_len_n + 1, )).at[-1].set(full_pr),
+# #    jnp.zeros((window_len_n + 1, )).at[-1].set(full_tr),
+# #    jnp.zeros((window_len_n + 1, )).at[-1].set(1)]
+# #  def single_len_pr_tr_os_updater(window_len_idx, multi_len_pr_tr_os_s):
+# #    temp_kernel_ft = jnp.fft.rfft(kernel_s[window_len_idx], step_n)
+# #    temp_cov_s = jnp.swapaxes(
+# #      jnp.fft.irfft(
+# #        cross_fluct_ft * temp_kernel_ft)[
+# #          ..., (2 * kernel_half_step_n - 1)::samp_separation],
+# #      -3, -1)
+# #    temp_pc_s = es_s_fct(temp_cov_s)
+# #    temp_pr = jnp.mean(dim_r_s_fct(temp_pc_s[0]))
+# #    temp_tr_s = size_s_fct(temp_pc_s[0])
+# #    temp_tr = jnp.mean(temp_tr_s)
+# #    temp_os = jnp.mean(ori_similarity_s_fct(full_pc, temp_pc_s,
+# #                                            full_tr, temp_tr_s))
+# #    multi_len_pr_tr_os_s = [
+# #      multi_len_pr_tr_os_s[0].at[window_len_idx].set(temp_pr),
+# #      multi_len_pr_tr_os_s[1].at[window_len_idx].set(temp_tr),
+# #      multi_len_pr_tr_os_s[2].at[window_len_idx].set(temp_os)]
+# #    return(multi_len_pr_tr_os_s)
+# #  multi_len_pr_tr_os_s = jax.lax.fori_loop(0, window_len_n,
+# #                                           single_len_pr_tr_os_updater,
+# #                                           multi_len_pr_tr_os_s)
+# #  return(multi_len_pr_tr_os_s)
+# #multi_len_pr_tr_os_s_fct = jax.jit(multi_len_pr_tr_os_s_fct, static_argnums = (3, ))
 
 
 
