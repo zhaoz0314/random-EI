@@ -480,7 +480,7 @@ def multi_len_pr_tr_os_s_fct(traj, resolution,
   if kernel_power == "inf":
     kernel_s = jnp.heaviside(jnp.arange(-kernel_half_step_n, kernel_half_step_n)
                              + jnp.expand_dims(window_len_s / 2, 1) * resolution, 0)
-    kernel_s = kernel_s * kernel_s[::-1]
+    kernel_s = kernel_s * kernel_s[:, ::-1]
     kernel_s = kernel_s / jnp.sum(kernel_s, axis = -1, keepdims = True)
   else:
     kernel_s = jnp.exp(
