@@ -133,7 +133,7 @@ def ext_connectivity_s_generator(sub_part_n_s, ext_sub_part_n_s,
   [key, *subkey_s] = jrandom.split(key, sub_pop_n * ext_sub_pop_n + 1)
   # first for each subpop and each ext subpop generate all instances
   stacked_block_s = [
-    [unscaled_ext_mean[sub_pop_idx, ext_sub_pop_idx] / ext_part_n
+    [unscaled_ext_mean[sub_pop_idx, ext_sub_pop_idx] / ext_part_n # sparse scaling
      + jnp.multiply(
        unscaled_ext_std[sub_pop_idx, ext_sub_pop_idx] / jnp.sqrt(ext_part_n),
        jrandom.normal(subkey_s[sub_pop_idx * sub_pop_n + ext_sub_pop_idx],
@@ -329,7 +329,7 @@ def mean_s_fct(traj_s):
 
 # mean and cov
 def cov_s_fct(traj_s, mean_s):
-  # find shapes
+  # find number of data points
   frame_n = traj_s.shape[-1]
   # compute
   mean_s = jnp.expand_dims(mean_s, -1)
@@ -366,9 +366,9 @@ def mean_cov_s_initializer(condition_n_s, part_n):
           jnp.zeros(tuple(condition_n_s) + (part_n, part_n))])
 
 # mean cov fct
-def mean_cov_fct(traj):
-  mean = mean_s_fct(traj)
-  return([mean, cov_s_fct(traj, mean)])
+def mean_cov_s_fct(traj_s):
+  mean_s = mean_s_fct(traj_s)
+  return([mean_s, cov_s_fct(traj_s, mean_s)])
 
 
 
@@ -437,12 +437,12 @@ def samp_separation_fct(interval_len, resolution,
   min_window_len = jnp.min(window_len_s)
   min_frame_n = (min_window_len * resolution)
   if min_frame_n > frame_n_threshold:
-    step_n = interval_len * resolution
+    frame_n = interval_len * resolution
     samp_n = jnp.minimum((interval_len / 2 / min_window_len + 1
                           # have an additional sample for more samples?
                           + 1),
                          samp_n_limit)
-    output = jnp.floor(step_n / samp_n).astype(int)
+    output = jnp.floor(frame_n / samp_n).astype(int)
   else:
     print(
       "frame number ({0:.1f}) lower than required ({1:})".format(
@@ -457,8 +457,6 @@ def multi_len_pr_tr_os_s_initializer(condition_n_s, window_len_s):
 
 # weighted covariances
 def weighted_cov_s_fct(traj_s, mean_s, weight_s):
-  # find shapes
-  frame_n = traj_s.shape[-1]
   # compute
   mean_s = jnp.expand_dims(mean_s, -1)
   deviation_s = traj_s - mean_s
@@ -472,46 +470,45 @@ def multi_len_pr_tr_os_s_fct(traj, resolution,
                              window_len_s, samp_separation,
                              kernel_power = 2):
   # find numbers
-  [part_n, step_n] = traj.shape
-  kernel_half_step_n = step_n // 4
+  [part_n, frame_n] = traj.shape
+  kernel_half_frame_n = frame_n // 4
   window_len_n = window_len_s.shape[0]
-  samp_n = (step_n - 1) // samp_separation + 1
-  # create kernel, half of the window as width/std, then normalize
-  if kernel_power == "inf":
-    kernel_s = jnp.heaviside(jnp.arange(-kernel_half_step_n, kernel_half_step_n)
-                             + jnp.expand_dims(window_len_s / 2, 1) * resolution, 0)
-    kernel_s = kernel_s * kernel_s[:, ::-1]
-    kernel_s = kernel_s / jnp.sum(kernel_s, axis = -1, keepdims = True)
-  else:
-    kernel_s = jnp.exp(
-      -((jnp.arange(-kernel_half_step_n,
-                    kernel_half_step_n) / resolution) ** kernel_power
-        / (2 * jnp.expand_dims(window_len_s / 2, 1) ** kernel_power)))
-    kernel_s = kernel_s / jnp.sum(kernel_s, axis = -1, keepdims = True)
+  samp_n = (frame_n - 1) // samp_separation + 1
   # find reference values (window at full length)
   full_mean = mean_s_fct(traj)
   full_cov = cov_s_fct(traj, full_mean)
   full_pc = es_s_fct(full_cov)
   full_pr = dim_r_s_fct(full_pc[0])
   full_tr = size_s_fct(full_pc[0])
-  # find fluctuations first
+  # create kernel, half of the window as width/std, then normalize
+  if kernel_power == "inf":
+    kernel_s = jnp.heaviside(jnp.arange(-kernel_half_frame_n, kernel_half_frame_n)
+                             + jnp.expand_dims(window_len_s / 2, 1) * resolution, 0)
+    kernel_s = kernel_s * kernel_s[:, ::-1]
+  else:
+    kernel_s = jnp.exp(
+      -((jnp.arange(-kernel_half_frame_n,
+                    kernel_half_frame_n) / resolution) ** kernel_power
+        / (2 * jnp.expand_dims(window_len_s / 2, 1) ** kernel_power)))
+  kernel_s = kernel_s / jnp.sum(kernel_s, axis = -1, keepdims = True)
+  # find fluctuations first then segment using samp_separation
   # local fluctuations may shift windowed covs
   fluct = traj - jnp.expand_dims(full_mean, -1)
+  temp_segmented_fluct_s = jax.lax.fori_loop(
+    0, samp_n,
+    lambda samp_idx, windowed_fluct_s:
+    windowed_fluct_s.at[
+      samp_idx].set(
+        jax.lax.dynamic_slice(fluct,
+                              (0, samp_idx * samp_separation),
+                              (part_n, kernel_half_frame_n * 2))),
+    jnp.zeros((samp_n, part_n, kernel_half_frame_n * 2)))
   # initialize output
   multi_len_pr_tr_os_s = [
     jnp.zeros((window_len_n + 1, )).at[-1].set(full_pr),
     jnp.zeros((window_len_n + 1, )).at[-1].set(full_tr),
     jnp.zeros((window_len_n + 1, )).at[-1].set(1)]
   def single_len_pr_tr_os_updater(window_len_idx, multi_len_pr_tr_os_s):
-    temp_segmented_fluct_s = jax.lax.fori_loop(
-      0, samp_n,
-      lambda samp_idx, windowed_fluct_s:
-      windowed_fluct_s.at[
-        samp_idx].set(
-          jax.lax.dynamic_slice(traj,
-                                (0, window_len_idx * samp_separation),
-                                (part_n, kernel_half_step_n * 2))),
-      jnp.zeros((samp_n, part_n, kernel_half_step_n * 2)))
     temp_cov_s = weighted_cov_s_fct(temp_segmented_fluct_s,
                                     jnp.zeros((part_n, )),
                                     kernel_s[window_len_idx])
@@ -537,27 +534,26 @@ multi_len_pr_tr_os_s_fct = jax.jit(multi_len_pr_tr_os_s_fct, static_argnums = (3
 # #                             window_len_s, samp_separation,
 # #                             kernel_power = 2):
 # #  # find numbers
-# #  step_n = traj.shape[-1]
-# #  kernel_half_step_n = step_n // 4
+# #  frame_n = traj.shape[-1]
+# #  kernel_half_frame_n = frame_n // 4
 # #  window_len_n = window_len_s.shape[0]
-# #  # create kernel, half of the window as width/std, then normalize
-# #  if kernel_power == "inf":
-# #    kernel_s = jnp.heaviside(jnp.arange(-kernel_half_step_n, kernel_half_step_n)
-# #                             + jnp.expand_dims(window_len_s / 2, 1) * resolution, 0)
-# #    kernel_s = kernel_s * kernel_s[::-1]
-# #    kernel_s = kernel_s / jnp.sum(kernel_s, axis = -1, keepdims = True)
-# #  else:
-# #    kernel_s = jnp.exp(
-# #      -((jnp.arange(-kernel_half_step_n,
-# #                    kernel_half_step_n) / resolution) ** kernel_power
-# #        / (2 * jnp.expand_dims(window_len_s / 2, 1) ** kernel_power)))
-# #    kernel_s = kernel_s / jnp.sum(kernel_s, axis = -1, keepdims = True)
 # #  # find reference values (window at full length)
 # #  full_mean = mean_s_fct(traj)
 # #  full_cov = cov_s_fct(traj, full_mean)
 # #  full_pc = es_s_fct(full_cov)
 # #  full_pr = dim_r_s_fct(full_pc[0])
 # #  full_tr = size_s_fct(full_pc[0])
+# #  # create kernel, half of the window as width/std, then normalize
+# #  if kernel_power == "inf":
+# #    kernel_s = jnp.heaviside(jnp.arange(-kernel_half_frame_n, kernel_half_frame_n)
+# #                             + jnp.expand_dims(window_len_s / 2, 1) * resolution, 0)
+# #    kernel_s = kernel_s * kernel_s[:, ::-1]
+# #  else:
+# #    kernel_s = jnp.exp(
+# #      -((jnp.arange(-kernel_half_frame_n,
+# #                    kernel_half_frame_n) / resolution) ** kernel_power
+# #        / (2 * jnp.expand_dims(window_len_s / 2, 1) ** kernel_power)))
+# #  kernel_s = kernel_s / jnp.sum(kernel_s, axis = -1, keepdims = True)  
 # #  # find Fourier transforms of cross fluctuations first
 # #  # local fluctuations may shift windowed covs
 # #  fluct = traj - jnp.expand_dims(full_mean, -1)
@@ -569,11 +565,11 @@ multi_len_pr_tr_os_s_fct = jax.jit(multi_len_pr_tr_os_s_fct, static_argnums = (3
 # #    jnp.zeros((window_len_n + 1, )).at[-1].set(full_tr),
 # #    jnp.zeros((window_len_n + 1, )).at[-1].set(1)]
 # #  def single_len_pr_tr_os_updater(window_len_idx, multi_len_pr_tr_os_s):
-# #    temp_kernel_ft = jnp.fft.rfft(kernel_s[window_len_idx], step_n)
+# #    temp_kernel_ft = jnp.fft.rfft(kernel_s[window_len_idx], frame_n)
 # #    temp_cov_s = jnp.swapaxes(
 # #      jnp.fft.irfft(
 # #        cross_fluct_ft * temp_kernel_ft)[
-# #          ..., (2 * kernel_half_step_n - 1)::samp_separation],
+# #          ..., (2 * kernel_half_frame_n - 1)::samp_separation],
 # #      -3, -1)
 # #    temp_pc_s = es_s_fct(temp_cov_s)
 # #    temp_pr = jnp.mean(dim_r_s_fct(temp_pc_s[0]))
