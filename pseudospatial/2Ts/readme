@@ -1,5 +1,0 @@
-these are calculated using high resolution trajectories (all 24 data points per unit time go into the stats).  file names are stds
-
-since the trajectories are long, I didn't save them but calculated the stats directly.  I only did 2 T's to avoid long computation times
-
-to do more T's, I decided to see if dropping interpolating points matters (since the timescale of the dynamics is slower than 1 unit time).  resolution.ipynb says it doesn't matter
