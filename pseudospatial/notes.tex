@@ -29,7 +29,7 @@
 
 
 % symbols
-\input{preamble.tex}
+%\input{preamble.tex}
 
 
 % drawing
@@ -47,7 +47,6 @@
 
 % file specific structures
 \newenvironment{prob}[1]{\noindent\textbf{#1}}{\medskip\indent} % {\medskip\newpage}
-\newenvironment{boxtext}{\begin{center} \begin{tabular}{|p{0.9\textwidth}|} \hline\\}{ \\\\\hline \end{tabular} \end{center} }
 % file specific aliases
 \newcommand{\orsi}{\operatorname{OriSim}}
 \newcommand{\todo}[1]{{\color{red} TODO: #1}}
@@ -63,93 +62,97 @@
 \begin{document}
 \maketitle
 % \tableofcontents
-
-\subsubsection{General method to obtain expectations: path integrals}
-$\mathrm{aA}\boldsymbol{\mathrm{aA}}\mathbf{aA}$
-
-\subsubsection{Classical method to obtain expectations: ad hoc}
-\todo{summary}
-
-\paragraph{Separating out mean-driven dynamics}
-
-\paragraph{Approximating variance-driven dynamics}
-After separating away the mean-driven dynamics, the variance-driven dynamics can be given by
-\todo{multi-pop case}.  In the single-population or same-variance case, 
-\begin{equation}
-  \label{eq:var-dyn}
-  \begin{aligned}
-      (1+\del_t)h_{i,t} - \bd{f}_{i,t} &= J_{ij}r_{j,t}\\
-      T\phd{h_{i,t}} :&= : \eta_{i,t}
-  \end{aligned}
-\end{equation}
-where the left is the causality operator acting on the state, and the right is a local field that is
-\uline{approximately} Gaussian and independent \todo{is this needed?}.
-
-To calculate the cross-covariance of $n$ neurons, conceptually separate the population into cavity
-neurons $h_\cct$, that is the $n$ neurons of interest, and reservoir neurons, that is all other
-neurons $h_\rrt$.  The actual trajectory can then be expressed as 
-\begin{align*}
-  r_i = \bar{r}_i + \delta r_i,
-\end{align*}
-where $\bar{\rR}_i$ is the trajectory when the reservoir is running without feedback
-$\bd{J}_{\rrt\cct}$ from or cross-talk $\bd{J}_{\rrt\rrt}$ between cavity neurons, and $\delta r_i$
-is the functional trajectory change resulting from adding back feedback and cross-talk.  For cavity
-neurons, this means their dynamics can be perturbatively expressed as
-\begin{equation}
-  \label{eq:pert-dyn}
-  \begin{aligned}
-      T\phd{h_{\cct,i,t}} &=J_{\cct\rrt,ij}(\bar{r}_{\rrt, j,t} + \delta r_{\rrt, j,t}) + J_{\cct\cct,ij}r_{\cct, j,t}\\
-  &=\bar{\eta}_{\cct, i,t} + J_{\cct\rrt,ij}\delta r_{\rrt, j,t} + J_{\cct\cct,ij}r_{\cct, j,t}\\
-  &=\bar{\eta}_{\cct, i,t} + J_{\cct\rrt,ij}\int^t\d t'\frac{\delta r_{\rrt, j,t}}{\delta \eta_{\rrt, k,t'}}J_{\rrt\cct, kl,t'} r_{\cct,l,t'} + J_{\cct\cct,ij}r_{\cct, j,t}\\
-  &=:\bar{\eta}_{\cct, i,t} + \frac{1}{\sqrt{N}}\int^t\d t'\,\sqrt{N}\phd{J_{\cct\rrt,ij}\,S_{\rrt\rrt,jk}(t,t')\,J_{\rrt\cct, kl,t'}+J_{\cct\cct,il}\delta(t-t')} r_{\cct,l,t'}\\
-  &=:\bar{\eta}_{\cct, i,t} + \frac{1}{\sqrt{N}}\int^t\d t'\,F_{\cct\cct,il}(t,t') r_{\cct,l,t'}
-  \end{aligned}
-\end{equation}
-by tracing each perturbation in their local field to cavity activities, \uline{assuming} that the
-perturbations propagate as $O(1)$ over time and as $O(1/\sqrt{N})$ over each spatial connection
-$\bd{J}$.  Note that
-\begin{align*}
-  O(F) = O\mphd{\sqrt{N\mooo{N\times 1/N^2+N(N-1)\times 1/N^3+1/N}}}=O(1),
-\end{align*}
-though this estimation puts doubt on the validity of only going to propagation paths of length $3$.
-Additionally, Eq.~\ref{eq:pert-dyn} also \uline{omits} $S_{\rrt\cct,jk}(t,t')$ contributions to
-reservoir units' local fields, which would introduce an error of $O(\sqrt{n/N})$ in $F$.
-
-Finally, Eq.~\ref{eq:pert-dyn} implies that in terms of the newly defined $S$,
-\begin{equation}
-  \label{eq:pert-sol}
-  \begin{aligned}
-    \delta r_{\cct,i,t} &= \frac{1}{\sqrt{N}}\int^t\d t'\,S_{\cct\cct,ii}(t,t') \int^{t'}\d t''\,F_{\cct\cct,il}(t',t'') r_{\cct,l,t'}\\
-  &= \frac{1}{\sqrt{N}}\int^t\d t'\,S_{\cct\cct,ii}(t-t') \int^{t'}\d t''\,F_{\cct\cct,il}(t'-t'') r_{\cct,l,t'},
-  \end{aligned}
-\end{equation}
-where the second line follows from the \uline{assumption} that that $\tau$-separated $S$ and $F$ are
-dominated by their time-averaged values, i.e.
-\begin{align*}
-  S_{\cct\cct,ij}(t,t-\tau) \approx \ept{S_{\cct\cct,ij}(t,t-\tau)}_t\tand F_{\cct\cct,ij}(t,t-\tau) \approx \ept{F_{\cct\cct,ij}(t,t-\tau)}_t.
-\end{align*}
-
-\paragraph{Calculating auto-covariance by specifying $T[\cdot]$}
-
-
-\paragraph{Relating expectations}
-
-
-
-\uline{assuming} that the auto-covariance is self-averaging,
-\begin{equation}
-  \label{eq:auto-cov}
-  C_{ii}(\tau) = \ept{r_{i,t}+\frac{1}{\sqrt{N}}\int^t\d t'\,S_{\cct\cct,ii} \int^{t'}\d t''\,F_{\cct\cct,il}(t',t'') r_{\cct,l,t'}}_t
-\end{equation}
-
-
-Applying the procedure above to the auto-covariance, since the auto-covariance evaluated at $0$ lag
-being the variance is $O(1)$, $\delta r$ is unused, and the procedure gives no further relations
-between expectations.
-\begin{align*}
-  C_{r,ii}(\tau) = \ept{r_{i,t}r_{i,t+\tau}}_t = \ept{\hat{r}_{i,t}\hat{r}_{i,t+\tau}}_t + O(1/\sqrt{N}),
-\end{align*}
-
-
-
+% 
+% \section{General method to obtain expectations: path integrals}
+% $\mathrm{aA}\boldsymbol{\mathrm{aA}}\mathbf{aA}$
+% 
+% \section{Classical method to obtain expectations: ad hoc}
+% \todo{summary}
+% 
+% \subsection{Separating out mean-driven dynamics}
+% 
+% \subsection{Approximating variance-driven dynamics}
+% After separating away the mean-driven dynamics, the variance-driven dynamics can be given by
+% \todo{multi-pop case}.  In the single-population or same-variance case, 
+% \begin{equation}
+%   \label{eq:var-dyn}
+%   \begin{aligned}
+%       (1+\del_t)h_{i,t} - \bd{f}_{i,t} &= J_{ij}r_{j,t}\\
+%       T\phd{h_{i,t}} :&= : \eta_{i,t}
+%   \end{aligned}
+% \end{equation}
+% where the left is the causality operator acting on the state, and the right is a local field that is
+% \uline{approximately} Gaussian and independent \todo{is this needed?}.
+% 
+% To calculate the cross-covariance of $n$ neurons, conceptually separate the population into cavity
+% neurons $h_\cct$, that is the $n$ neurons of interest, and reservoir neurons, that is all other
+% neurons $h_\rrt$.  The actual trajectory can then be expressed as 
+% \begin{align*}
+%   r_i = \bar{r}_i + \delta r_i,
+% \end{align*}
+% where $\bar{\rR}_i$ is the trajectory when the reservoir is running without feedback
+% $\bd{J}_{\rrt\cct}$ from or cross-talk $\bd{J}_{\rrt\rrt}$ between cavity neurons, and $\delta r_i$
+% is the functional trajectory change resulting from adding back feedback and cross-talk.  For cavity
+% neurons, this means their dynamics can be perturbatively expressed as
+% \begin{equation}
+%   \label{eq:pert-dyn}
+%   \begin{aligned}
+%       T\phd{h_{\cct,i,t}} &=J_{\cct\rrt,ij}(\bar{r}_{\rrt, j,t} + \delta r_{\rrt, j,t}) + J_{\cct\cct,ij}r_{\cct, j,t}\\
+%   &=\bar{\eta}_{\cct, i,t} + J_{\cct\rrt,ij}\delta r_{\rrt, j,t} + J_{\cct\cct,ij}r_{\cct, j,t}\\
+%   &=\bar{\eta}_{\cct, i,t} + J_{\cct\rrt,ij}\int^t\d t'\frac{\delta r_{\rrt, j,t}}{\delta \eta_{\rrt, k,t'}}J_{\rrt\cct, kl,t'} r_{\cct,l,t'} + J_{\cct\cct,ij}r_{\cct, j,t}\\
+%   &=:\bar{\eta}_{\cct, i,t} + \frac{1}{\sqrt{N}}\int^t\d t'\,\sqrt{N}\phd{J_{\cct\rrt,ij}\,S_{\rrt\rrt,jk}(t,t')\,J_{\rrt\cct, kl,t'}+J_{\cct\cct,il}\delta(t-t')} r_{\cct,l,t'}\\
+%   &=:\bar{\eta}_{\cct, i,t} + \frac{1}{\sqrt{N}}\int^t\d t'\,F_{\cct\cct,il}(t,t') r_{\cct,l,t'}
+%   \end{aligned}
+% \end{equation}
+% by tracing each perturbation in their local field to cavity activities, \uline{assuming} that the
+% perturbations propagate as $O(1)$ over time and as $O(1/\sqrt{N})$ over each spatial connection
+% $\bd{J}$.  Note that
+% \begin{align*}
+%   O(F) = O\mphd{\sqrt{N\mooo{N\times 1/N^2+N(N-1)\times 1/N^3+1/N}}}=O(1),
+% \end{align*}
+% though this estimation puts doubt on the validity of only going to propagation paths of length $3$.
+% Additionally, Eq.~\ref{eq:pert-dyn} also \uline{omits} $S_{\rrt\cct,jk}(t,t')$ contributions to
+% reservoir units' local fields, which would introduce an error of $O(\sqrt{n/N})$ in $F$.
+% 
+% Finally, Eq.~\ref{eq:pert-dyn} implies that in terms of the newly defined $S$,
+% \begin{equation}
+%   \label{eq:pert-sol}
+%   \begin{aligned}
+%     \delta r_{\cct,i,t} &= \frac{1}{\sqrt{N}}\int^t\d t'\,S_{\cct\cct,ii}(t,t') \int^{t'}\d t''\,F_{\cct\cct,il}(t',t'') r_{\cct,l,t'}\\
+%   &= \frac{1}{\sqrt{N}}\int^t\d t'\,S_{\cct\cct,ii}(t-t') \int^{t'}\d t''\,F_{\cct\cct,il}(t'-t'') r_{\cct,l,t'},
+%   \end{aligned}
+% \end{equation}
+% where the second line follows from the \uline{assumption} that that $\tau$-separated $S$ and $F$ are
+% dominated by their time-averaged values, i.e.
+% \begin{align*}
+%   S_{\cct\cct,ij}(t,t-\tau) \approx \ept{S_{\cct\cct,ij}(t,t-\tau)}_t\tand F_{\cct\cct,ij}(t,t-\tau) \approx \ept{F_{\cct\cct,ij}(t,t-\tau)}_t.
+% \end{align*}
+% 
+% \subsetion{Calculating auto-covariance by specifying $T[\cdot]$}
+% 
+% 
+% \sunsection{Relating expectations}
+% 
+% 
+% 
+% \uline{assuming} that the auto-covariance is self-averaging,
+% \begin{equation}
+%   \label{eq:auto-cov}
+%   C_{ii}(\tau) = \ept{r_{i,t}+\frac{1}{\sqrt{N}}\int^t\d t'\,S_{\cct\cct,ii} \int^{t'}\d t''\,F_{\cct\cct,il}(t',t'') r_{\cct,l,t'}}_t
+% \end{equation}
+% 
+% 
+% Applying the procedure above to the auto-covariance, since the auto-covariance evaluated at $0$ lag
+% being the variance is $O(1)$, $\delta r$ is unused, and the procedure gives no further relations
+% between expectations.
+% \begin{align*}
+%   C_{r,ii}(\tau) = \ept{r_{i,t}r_{i,t+\tau}}_t = \ept{\hat{r}_{i,t}\hat{r}_{i,t+\tau}}_t + O(1/\sqrt{N}),
+% \end{align*}
+% 
+% 
+%
+% % this location is for natbib, bibtex uses somewhere else
+% \bibliography{neuralModeling.bib} 
+% \bibliographystyle{unsrtnat}
+% 
 \end{document}
