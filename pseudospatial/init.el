@@ -81,28 +81,28 @@ There are two things you can do about this warning:
 ;; turn off alarm bell
 (setq ring-bell-function 'ignore)
 
-;;make C-j always electric and C-m (RET) always mechanical
+;; make C-j always electric and C-m (RET) always mechanical
 (setq electric-indent-mode nil)
 
-;;setup ido and smex
+;; setup ido and smex
 (require 'ido)
 (ido-mode t) ; use ido
 (setq ido-auto-merge-work-directories-length -1) ; turn off ido-merge directory
 (smex-initialize)
 
-;;set ace-jump-search order
+;; set ace-jump-search order
 (require 'ace-jump-mode)
 (setq ace-jump-mode-submode-list
       '(ace-jump-char-mode
 	ace-jump-word-mode
 	ace-jump-line-mode)) ; the order matches key, C-u key, C-u C-u key
 
-;;setting up the list of recent files
+;; setting up the list of recent files
 (recentf-mode 1)
 (setq recentf-max-saved-items 200)
 (setq recentf-max-menu-items 200)
 
-;;enable "confusing commands"
+;; enable "confusing commands"
 (put 'dired-find-alternate-file 'disabled nil)
 (put 'narrow-to-region 'disabled nil)
 (put 'narrow-to-page 'disabled nil)
@@ -114,22 +114,22 @@ There are two things you can do about this warning:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;mode-specific behaviors;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;;setting up bibtex and reftex under auctex
+;; setting up bibtex and reftex under auctex
 (setq TeX-parse-self t) ; Enable parse on load.
 (setq TeX-auto-save t) ; Enable parse on save.
 (setq reftex-bibliography-commands '("bibliography" "nobibliography" "addbibresource"))
 (add-hook 'LaTeX-mode-hook 'turn-on-reftex) ; with AUCTeX LaTeX mode
 (add-hook 'latex-mode-hook 'turn-on-reftex) ; with Emacs latex mode
 
-;;python indentation
+;; python indentation
 (add-hook 'python-mode-hook
 	  #'(lambda () (setq python-indent 2)))
 
-;;setting up line-wrap under org-mode
+;; setting up line-wrap under org-mode
 (require 'org) ; calls "load" to load package "org" when org is not yet loaded
 (setq org-startup-truncated nil)
 
-;;auto-started minor-modes in certain major modes
+;; auto-started minor-modes in certain major modes
 (add-hook 'text-mode-hook 'turn-on-auto-fill)
 (add-hook 'latex-mode-hook 'turn-on-auto-fill)
 (add-hook 'LaTeX-mode-hook 'turn-on-auto-fill)
@@ -146,11 +146,11 @@ There are two things you can do about this warning:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;x-relevant appearances;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;;transparency
+;; transparency
 (set-frame-parameter (selected-frame) 'alpha '(100 . 75)) ; (set-frame-parameter (selected-frame) 'alpha '(<active> . <inactive>))
 (add-to-list 'default-frame-alist '(alpha . (100 . 75))) ;(set-frame-parameter (selected-frame) 'alpha <both>)
 
-;;move away the mouse when it is potentially confusing
+;; move away the mouse when it is potentially confusing
 (mouse-avoidance-mode 'exile)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;x-irrelevant appearances;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -203,6 +203,23 @@ There are two things you can do about this warning:
    `(company-tooltip-selection ((t (:inherit font-lock-function-name-face))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;mode-general key-bindings;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; mac modifiers
+(when (eq system-type 'darwin) ;; mac specific settings
+  (setq mac-control-modifier 'none)
+  (setq mac-command-modifier 'control)
+  (setq mac-option-modifier 'meta)
+  (setq mac-right-control-modifier 'none)
+  (setq mac-right-command-modifier 'control)
+  (setq mac-right-option-modifier 'meta)
+  (global-set-key [kp-delete] 'delete-char) ;; sets fn-delete to be right-delete
+  (setq TeX-view-program-list '(("Preview" ("open -a Preview.app %s.pdf") "Preview")))  ;; set pdf viewer to Preview.app
+  (setq TeX-view-program-selection
+	'(((output-dvi has-no-display-manager) "dvi2tty")
+	  ((output-dvi style-pstricks) "dvips and gv")
+	  (output-dvi "xdvi")
+	  (output-pdf "Preview.app")
+	  (output-html "xdg-open"))))
 
 ;;remapping
 (global-set-key (kbd "C-?") 'help-command) ; previously C-h
