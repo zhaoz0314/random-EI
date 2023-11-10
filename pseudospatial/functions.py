@@ -263,7 +263,7 @@ def rk4_ode_solver(velocity_fct, ext_input_fct, traj_holder, time_interval, reso
     return(position_s.at[..., step_idx].set(next_position))
   position_s = jax.lax.fori_loop(1, step_n, step_forward, traj_holder)[..., 1:]
   return(position_s)
-# rk4_ode_solver = jax.jit(rk4_ode_solver)
+rk4_ode_solver = jax.jit(rk4_ode_solver)
 
 
 
