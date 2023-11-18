@@ -598,7 +598,7 @@ def multi_len_pr_tr_os_s_fct(traj, resolution,
     # temp_kernel_ft = jnp.fft.rfft(kernel_s[window_len_idx], frame_n)
     # temp_cov_s = jnp.swapaxes(
     #   jnp.fft.irfft(
-    #     cross_fluct_ft * temp_kernel_ft)[
+    #     cross_fluct_ft * temp_kernel_ft, frame_n)[
     #       ..., (kernel_frame_n - 1)::samp_separation][
     #       ..., :samp_n],
     #   -3, -1)
