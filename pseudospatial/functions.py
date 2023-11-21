@@ -242,13 +242,13 @@ def traj_initializer(init_condition, time_interval, resolution):
   return(traj_holder)
 
 # solver for possibly non-autonomous ODEs
-def rk4_ode_solver(velocity_fct, ext_input_fct, traj_holder, time_interval, resolution):
+def rk4_ode_solver(velocity_fct, ext_input_fct, traj_holder, init_time, resolution):
   # find the system size, step size, and step number
   step_size = 1 / resolution
   step_n = traj_holder.shape[-1]
   # evolving positions
   def step_forward(step_idx, position_s):
-    previous_time = time_interval[0] + step_size * (step_idx - 1)
+    previous_time = init_time + step_size * (step_idx - 1)
     previous_position = position_s[..., step_idx - 1]
     velocity_0 = (velocity_fct(previous_position)
                   + ext_input_fct(previous_time))
@@ -322,7 +322,7 @@ def stat_s_fct(connectivity_s, wave_s, ext_connectivity_s, phase_s,
         wave_s[unraveled_idx[1]], ext_connectivity_s[unraveled_idx[2]], phase_s[unraveled_idx[3]],
         labeled_time_interval_s, time),
       temp_traj,
-      joined_time_interval, resolution))
+      joined_time_interval[0], resolution))
     # find stats
     temp_stat_s = stat_fct(temp_traj)
     # fill in stats using condition indices
