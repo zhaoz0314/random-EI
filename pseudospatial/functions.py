@@ -503,22 +503,22 @@ def kernel_error(kernel_power_s, kernel_fraction, inf, resolution):
         / (2 * 0.5 ** kernel_power_s))), axis = -1))
 
 # interval length needed
-def min_interval_len_fct(window_len_s, samp_separation_len, samp_n,
+def min_interval_len_fct(window_len_s, samp_sep_len, samp_n,
                          max_kernel_fraction):
-  if samp_separation_len == "skip_min":
-    samp_separation_len = jnp.min(window_len_s)
+  if samp_sep_len == "skip_min":
+    samp_sep_len = jnp.min(window_len_s)
   if samp_n == "fill_max":
-    samp_n = (jnp.max(window_len_s) // samp_separation_len).astype(int)
+    samp_n = (jnp.max(window_len_s) // samp_sep_len).astype(int)
   # max_kernel_fraction for gaussian is 0.4, for jnp.inf is 1
   min_kernel_len = jnp.ceil(jnp.max(window_len_s) / max_kernel_fraction)
-  return((samp_n - 1) * samp_separation_len + min_kernel_len)
+  return((samp_n - 1) * samp_sep_len + min_kernel_len)
 
-# samp_separation_with_n
-def samp_separation_with_n_fct(window_len_s, resolution):
-  samp_separation_len = jnp.min(window_len_s)
-  samp_n = (jnp.max(window_len_s) // samp_separation_len).astype(int)
+# sample separation with n
+def samp_sep_with_n_fct(window_len_s, resolution):
+  samp_sep_len = jnp.min(window_len_s)
+  samp_n = (jnp.max(window_len_s) // samp_sep_len).astype(int)
   # peel away array
-  return((int(samp_separation_len * resolution), int(samp_n)))
+  return((int(samp_sep_len * resolution), int(samp_n)))
 
 # kernels
 def kernel_s_fct(window_len_s, resolution, kernel_power, max_kernel_fraction):
@@ -549,7 +549,7 @@ def multi_len_pr_tr_os_s_initializer(condition_n_s, window_len_s,
 # pr tr os for nTs
 ## (using explicit (high time C) or fourier (high space C) convolution)
 def multi_len_pr_tr_os_s_fct(traj, resolution,
-                             kernel_s, samp_separation_with_n):
+                             kernel_s, samp_sep_with_n):
   # find numbers
   # <explicit convolution prep>
   part_n = traj.shape[0]
@@ -559,7 +559,7 @@ def multi_len_pr_tr_os_s_fct(traj, resolution,
   # # </fourier convolution prep>
   kernel_frame_n = kernel_s.shape[-1]
   window_len_n = kernel_s.shape[0]
-  [samp_separation, samp_n] = samp_separation_with_n
+  [samp_sep, samp_n] = samp_sep_with_n
   # find reference values (window at full length)
   full_mean = mean_s_fct(traj)
   full_cov = cov_s_fct(traj, full_mean)
@@ -575,7 +575,7 @@ def multi_len_pr_tr_os_s_fct(traj, resolution,
     windowed_fluct_s.at[
       samp_idx].set(
         jax.lax.dynamic_slice(fluct,
-                              (0, samp_idx * samp_separation),
+                              (0, samp_idx * samp_sep),
                               (part_n, kernel_frame_n))),
     jnp.zeros((samp_n, part_n, kernel_frame_n)))
   # </explicit convolution prep>
@@ -599,7 +599,7 @@ def multi_len_pr_tr_os_s_fct(traj, resolution,
     # temp_cov_s = jnp.swapaxes(
     #   jnp.fft.irfft(
     #     cross_fluct_ft * temp_kernel_ft, frame_n)[
-    #       ..., (kernel_frame_n - 1)::samp_separation][
+    #       ..., (kernel_frame_n - 1)::samp_sep][
     #       ..., :samp_n],
     #   -3, -1)
     # # </fourier convolution>
