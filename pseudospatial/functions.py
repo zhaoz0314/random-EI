@@ -444,16 +444,16 @@ dim_r_s_fct = jax.jit(dim_r_s_fct)
 def size_s_fct(var_s):
   return(jnp.mean(var_s, axis = -1))
 
-# cov orientation similarity, tr(sqrt1 sqrt2)/std1/std2
-def ori_similarity_s_fct(es_s_1, es_s_2, size_s_1, size_s_2):
-  part_n = es_s_1[0].shape[-1]
-  std_s_1 = jnp.sqrt(es_s_1[0])
-  std_s_2 = jnp.sqrt(es_s_2[0])
+# cov orientation similarity, tr(ab)/sqrt(tr(a^2)tr(b^2))
+def ori_similarity_s_fct(es_s_1, es_s_2):
+  var_s_1 = es_s_1[0]
+  var_s_2 = es_s_2[0]
   rot_s = jnp.swapaxes(es_s_1[1], -1, -2) @ es_s_2[1]
   return(jnp.einsum("...i, ...ij, ...ij, ...j",
-                    std_s_1, rot_s, rot_s, std_s_2,
+                    var_s_1, rot_s, rot_s, var_s_2,
                     optimize = True)
-         / jnp.sqrt(size_s_1 * size_s_2) / part_n)
+         / jnp.sqrt(jnp.sum(var_s_1 ** 2, axis = -1) 
+                    * jnp.sum(var_s_2 ** 2, axis = -1)))
 ori_similarity_s_fct = jax.jit(ori_similarity_s_fct)
 
 
@@ -544,10 +544,9 @@ def multi_len_pr_tr_os_s_initializer(condition_n_s, window_len_s,
   window_len_n = window_len_s.shape[0]
   return([jnp.zeros(tuple(condition_n_s)
                     + (window_len_n + 1, samp_n))
-          for stat_idx in range(3)])
+          for stat_idx in range(4)])
 
-# pr tr os for nTs
-## (using explicit (high time C) or fourier (high space C) convolution)
+# get quantities
 def multi_len_pr_tr_os_s_fct(traj, resolution,
                              kernel_s, samp_sep_with_n):
   # find numbers
@@ -587,6 +586,7 @@ def multi_len_pr_tr_os_s_fct(traj, resolution,
   multi_len_pr_tr_os_s = [
     jnp.zeros((window_len_n + 1, samp_n)).at[-1].set(full_pr),
     jnp.zeros((window_len_n + 1, samp_n)).at[-1].set(full_tr),
+    jnp.zeros((window_len_n + 1, samp_n)).at[-1].set(1),
     jnp.zeros((window_len_n + 1, samp_n)).at[-1].set(1)]
   def single_len_pr_tr_os_updater(window_len_idx, multi_len_pr_tr_os_s):
     # <explicit convolution>
@@ -606,12 +606,14 @@ def multi_len_pr_tr_os_s_fct(traj, resolution,
     temp_pc_s = es_s_fct(temp_cov_s)
     temp_pr_s = dim_r_s_fct(temp_pc_s[0])
     temp_tr_s = size_s_fct(temp_pc_s[0])
-    temp_os_s = ori_similarity_s_fct(full_pc, temp_pc_s,
-                                     full_tr, temp_tr_s)
+    temp_os_s = ori_similarity_s_fct(full_pc, temp_pc_s)
+    temp_lagged_os_s = ori_similarity_s_fct([temp_pc_s[0][0], temp_pc_s[1][0]], 
+                                            temp_pc_s)
     multi_len_pr_tr_os_s = [
       multi_len_pr_tr_os_s[0].at[window_len_idx].set(temp_pr_s),
       multi_len_pr_tr_os_s[1].at[window_len_idx].set(temp_tr_s),
-      multi_len_pr_tr_os_s[2].at[window_len_idx].set(temp_os_s)]
+      multi_len_pr_tr_os_s[2].at[window_len_idx].set(temp_os_s),
+      multi_len_pr_tr_os_s[3].at[window_len_idx].set(temp_lagged_os_s)]
     return(multi_len_pr_tr_os_s)
   multi_len_pr_tr_os_s = jax.lax.fori_loop(0, window_len_n,
                                            single_len_pr_tr_os_updater,
