@@ -31,7 +31,7 @@ def sub_part_n_s_fct(part_n_s, sub_part_r_s):
 
 # (scaled or unscaled) mean calculator
 def ei_mean_balancer(ei_part_n_s, e_mean):
-  return(jnp.tile(jnp.asarray([e_mean, - e_mean * ei_part_n_s[0] / ei_part_n_s[1]]), (2, 1)))
+  return(jnp.tile(jnp.array([e_mean, - e_mean * ei_part_n_s[0] / ei_part_n_s[1]]), (2, 1)))
 
 # intensive K # (unscaled mean, std) = (unscaled_strength, 0)
 def dense_bernoulli_parameter_s_fct(unscaled_mean, unscaled_std):
@@ -51,24 +51,31 @@ def sparse_bernoulli_parameter_s_fct(unscaled_mean, unscaled_std):
 
 ############################## obtaining random conditions ##############################
 # connectivities
-def connectivity_s_generator(sub_part_n_s, unscaled_mean, unscaled_std,
+def connectivity_s_generator(sub_part_n_s, unscaled_mean, unscaled_std, unscaled_std_log_std,
                              connectivity_n,
                              key = jnp.array([0, 0], dtype = jnp.uint32)):
   # find particle number and arrangement of blocks
   part_n = jnp.sum(sub_part_n_s)
   block_shape = unscaled_mean.shape
   block_n = unscaled_mean.size
+  column_gain_n = unscaled_std_log_std.shape[0]
   # split key
-  [key, *subkey_s] = jrandom.split(key, block_n + 1)
-  # first for each block position generate for all connectivities
-  stacked_block_s = [[unscaled_mean[row_idx, column_idx] / jnp.sqrt(part_n)
-                      + jnp.multiply(
-                        unscaled_std[row_idx, column_idx] / jnp.sqrt(part_n),
-                        jrandom.normal(
-                          subkey_s[row_idx * block_shape[0] + column_idx],
-                          (connectivity_n, sub_part_n_s[row_idx], sub_part_n_s[column_idx])))
-                      for column_idx in range(block_shape[1])]
-                     for row_idx in range(block_shape[0])]
+  [key, *subkey_s] = jrandom.split(key, block_shape[1] + block_n + 1)
+  # first for each block position generate column gains
+  unscaled_std_log_s = [
+    jnp.expand_dims(unscaled_std_log_std[:, column_idx], 1)
+    * jrandom.normal(subkey_s[column_idx],
+                     (connectivity_n, column_gain_n, sub_part_n_s[column_idx]))
+    for column_idx in range(block_shape[1])]
+  # then for each block position generate all connectivities
+  stacked_block_s = [
+    [unscaled_mean[row_idx, column_idx] / jnp.sqrt(part_n)
+     + (((unscaled_std[row_idx, column_idx] / jnp.sqrt(part_n)) 
+         * jnp.expand_dims(jnp.exp(unscaled_std_log_s[column_idx][:, row_idx]), 1))
+        * jrandom.normal(subkey_s[block_shape[1] + row_idx * block_shape[0] + column_idx],
+                         (connectivity_n, sub_part_n_s[row_idx], sub_part_n_s[column_idx])))
+     for column_idx in range(block_shape[1])]
+    for row_idx in range(block_shape[0])]
   # then build connectivities using blocks
   return([jnp.block(stacked_block_s), key])
 
@@ -137,11 +144,10 @@ def ext_connectivity_s_generator(sub_part_n_s, ext_sub_part_n_s,
   # first for each subpop and each ext subpop generate all instances
   stacked_block_s = [
     [unscaled_ext_mean[sub_pop_idx, ext_sub_pop_idx] / ext_part_n # sparse scaling
-     + jnp.multiply(
-       unscaled_ext_std[sub_pop_idx, ext_sub_pop_idx] / jnp.sqrt(ext_part_n),
-       jrandom.normal(subkey_s[sub_pop_idx * sub_pop_n + ext_sub_pop_idx],
-                      (ext_connectivity_n,
-                       sub_part_n_s[sub_pop_idx], ext_sub_part_n_s[ext_sub_pop_idx])))
+     + ((unscaled_ext_std[sub_pop_idx, ext_sub_pop_idx] / jnp.sqrt(ext_part_n))
+        * jrandom.normal(subkey_s[sub_pop_idx * sub_pop_n + ext_sub_pop_idx],
+                         (ext_connectivity_n,
+                          sub_part_n_s[sub_pop_idx], ext_sub_part_n_s[ext_sub_pop_idx])))
      for ext_sub_pop_idx in range(ext_sub_pop_n)]
     for sub_pop_idx in range(sub_pop_n)]
   # then combine blocks
@@ -224,11 +230,9 @@ def sin_ext_input_fct(wave, ext_connectivity, phase, labeled_time_interval_s, ti
     # if in intervals
     * ((labeled_time_interval_s[0][:, 0] <= time)
        & (time < labeled_time_interval_s[0][:, 1])).astype(jnp.float32))
-  return(
-    jnp.multiply(
-      condition_indicator,
-      ext_connectivity
-      @ (wave[0] * jnp.cos(2 * jnp.pi * (wave[1] * time + phase)))))
+  return(condition_indicator
+         * (ext_connectivity
+            @ (wave[0] * jnp.cos(2 * jnp.pi * (wave[1] * time + phase)))))
 sin_ext_input_fct = jax.jit(sin_ext_input_fct)
 
 
@@ -279,8 +283,8 @@ def stat_s_fct(connectivity_s, wave_s, ext_connectivity_s, phase_s,
   ext_connectivity_n = ext_connectivity_s.shape[0]
   phase_n = phase_s.shape[0]
   init_condition_n = init_condition_s.shape[0]
-  condition_n_s = jnp.asarray([connectivity_n, wave_n, ext_connectivity_n, phase_n,
-                               init_condition_n])
+  condition_n_s = jnp.array([connectivity_n, wave_n, ext_connectivity_n, phase_n,
+                             init_condition_n])
   condition_n = jnp.prod(condition_n_s)
   condition_s = [connectivity_s, wave_s, ext_connectivity_s, phase_s,
                  init_condition_s]
@@ -295,8 +299,8 @@ def stat_s_fct(connectivity_s, wave_s, ext_connectivity_s, phase_s,
         sep = "\r\n")
   print("{} stats".format(stat_n))
   # define body function (traj holder created outside to avoid jit)
-  joined_time_interval = jnp.asarray([labeled_time_interval_s[0][0,0],
-                                      labeled_time_interval_s[0][-1,1]])
+  joined_time_interval = jnp.array([labeled_time_interval_s[0][0,0],
+                                    labeled_time_interval_s[0][-1,1]])
   temp_traj_holder = traj_initializer(init_condition_s[0], joined_time_interval, resolution)
   def stat_s_updater(condition_idx, stat_s_with_condition_s):
     # unpack second variable
@@ -308,8 +312,8 @@ def stat_s_fct(connectivity_s, wave_s, ext_connectivity_s, phase_s,
     ext_connectivity_n = ext_connectivity_s.shape[0]
     phase_n = phase_s.shape[0]
     init_condition_n = init_condition_s.shape[0]
-    condition_n_s = jnp.asarray([connectivity_n, wave_n, ext_connectivity_n, phase_n,
-                                 init_condition_n])
+    condition_n_s = jnp.array([connectivity_n, wave_n, ext_connectivity_n, phase_n,
+                               init_condition_n])
     # find condition indices
     unraveled_idx = jnp.unravel_index(condition_idx, condition_n_s)
     # simulate traj
