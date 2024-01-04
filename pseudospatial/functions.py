@@ -361,8 +361,8 @@ def cov_s_fct(traj_s, mean_s):
   frame_n = traj_s.shape[-1]
   # compute
   mean_s = jnp.expand_dims(mean_s, -1)
-  deviation_s = traj_s - mean_s
-  cov_s = deviation_s @ jnp.swapaxes(deviation_s, -1, -2) / frame_n
+  fluct_s = traj_s - mean_s
+  cov_s = fluct_s @ jnp.swapaxes(fluct_s, -1, -2) / frame_n
   return(cov_s)
 cov_s_fct = jax.jit(cov_s_fct)
 
@@ -370,8 +370,8 @@ cov_s_fct = jax.jit(cov_s_fct)
 def weighted_cov_s_fct(traj_s, mean_s, weight_s):
   # compute
   mean_s = jnp.expand_dims(mean_s, -1)
-  deviation_s = traj_s - mean_s
-  cov_s = (deviation_s @ jnp.swapaxes(deviation_s * weight_s, -1, -2)
+  fluct_s = traj_s - mean_s
+  cov_s = (fluct_s @ jnp.swapaxes(fluct_s * weight_s, -1, -2)
            / jnp.sum(weight_s))
   return(cov_s)
 weighted_cov_s_fct = jax.jit(weighted_cov_s_fct)
@@ -384,12 +384,12 @@ def matched_correlation_fct(traj_s_1, traj_s_2, mean_s_1, mean_s_2):
   # remove means
   mean_s_1 = jnp.expand_dims(mean_s_1, -1)
   mean_s_2 = jnp.expand_dims(mean_s_2, -1)
-  deviation_s_1 = traj_s_1 - mean_s_1
-  deviation_s_2 = traj_s_2 - mean_s_2
+  fluct_s_1 = traj_s_1 - mean_s_1
+  fluct_s_2 = traj_s_2 - mean_s_2
   # calculate the (unflipped) convolution
-  ft_1 = jnp.fft.rfft(deviation_s_1,
+  ft_1 = jnp.fft.rfft(fluct_s_1,
                       convolution_len)
-  ft_2 = jnp.fft.rfft(deviation_s_2[..., ::-1],
+  ft_2 = jnp.fft.rfft(fluct_s_2[..., ::-1],
                       convolution_len)
   convolved_array = jnp.fft.irfft(ft_1 * ft_2,
                                   convolution_len)[...,
