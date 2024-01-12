@@ -132,7 +132,7 @@ def ei_spectral_radius_fct(e_part_r, ei_std_s):
 
 # external connectivities
 def ext_connectivity_s_generator(sub_part_n_s, ext_sub_part_n_s,
-                                 unscaled_ext_mean, unscaled_ext_std,
+                                 unscaled_ext_mean, unscaled_ext_std, inter_instance_correlation,
                                  ext_connectivity_n, 
                                  key = jnp.array([0, 0], dtype = jnp.uint32)):
   # find number of sub populations
@@ -144,10 +144,15 @@ def ext_connectivity_s_generator(sub_part_n_s, ext_sub_part_n_s,
   # first for each subpop and each ext subpop generate all instances
   stacked_block_s = [
     [unscaled_ext_mean[sub_pop_idx, ext_sub_pop_idx] / ext_part_n # sparse scaling
-     + ((unscaled_ext_std[sub_pop_idx, ext_sub_pop_idx] / jnp.sqrt(ext_part_n))
-        * jrandom.normal(subkey_s[sub_pop_idx * sub_pop_n + ext_sub_pop_idx],
-                         (ext_connectivity_n,
-                          sub_part_n_s[sub_pop_idx], ext_sub_part_n_s[ext_sub_pop_idx])))
+     + (unscaled_ext_std[sub_pop_idx, ext_sub_pop_idx] / jnp.sqrt(ext_part_n)
+        * jnp.transpose(
+          jrandom.multivariate_normal(
+            subkey_s[sub_pop_idx * sub_pop_n + ext_sub_pop_idx],
+            jnp.full((ext_connectivity_n, ), 0),
+            inter_instance_correlation,
+            (sub_part_n_s[sub_pop_idx], ext_sub_part_n_s[ext_sub_pop_idx]), 
+            method = "svd"),
+          (2, 0, 1)))
      for ext_sub_pop_idx in range(ext_sub_pop_n)]
     for sub_pop_idx in range(sub_pop_n)]
   # then combine blocks
@@ -167,44 +172,6 @@ def init_condition_s_generator(part_n, mean, cov, init_condition_n,
   [key, subkey] = jrandom.split(key)
   return([jrandom.multivariate_normal(subkey, mean, cov, (init_condition_n, )),
           key])
-
-
-# deterministic modifications
-# external connectivities with orientational structure spanning an angle
-def ext_connectivity_s_rotator(imperfect_basis_s, angle_s,
-                               sub_part_n_s, ext_sub_part_n_s,
-                               unscaled_ext_mean, unscaled_ext_std):
-  # get sizes and boundary indices
-  sub_pop_n = unscaled_ext_mean.shape[0]
-  ext_sub_pop_n = unscaled_ext_mean.shape[1]
-  sub_part_boundary_s = jnp.insert(jnp.cumsum(sub_part_n_s), 0, 0)
-  ext_sub_part_boundary_s = jnp.insert(jnp.cumsum(ext_sub_part_n_s), 0, 0)
-  # gram-schmidt and correct the scaling
-  stacked_basis_s = [
-    [(jnp.linalg.qr(
-      jnp.swapaxes(imperfect_basis_s[:,
-                                     sub_part_boundary_s[sub_pop_idx]
-                                     :sub_part_boundary_s[sub_pop_idx + 1],
-                                     ext_sub_part_boundary_s[sub_pop_idx]
-                                     :ext_sub_part_boundary_s[sub_pop_idx + 1]],
-                   0, -1))[0]
-      * jnp.sqrt(sub_part_n_s[sub_pop_idx] / ext_sub_part_n_s[ext_sub_pop_idx]))
-     for ext_sub_pop_idx in range(ext_sub_pop_n)]
-    for sub_pop_idx in range(sub_pop_n)]
-  # rotate
-  cos_angle_s = jnp.cos(angle_s)
-  sin_angle_s = jnp.sin(angle_s)
-  stacked_block_s = [
-    [(jnp.einsum("i,jk->ijk",
-                 cos_angle_s, jnp.swapaxes(stacked_basis_s[sub_pop_idx][ext_sub_pop_idx][:, :, 0],
-                                           0, 1))
-     + jnp.einsum("i,jk->ijk",
-                 sin_angle_s, jnp.swapaxes(stacked_basis_s[sub_pop_idx][ext_sub_pop_idx][:, :, 1],
-                                           0, 1)))
-     for ext_sub_pop_idx in range(ext_sub_pop_n)]
-    for sub_pop_idx in range(sub_pop_n)]
-  return(jnp.block(stacked_block_s))
-
 
 
 
@@ -401,10 +368,12 @@ matched_correlation_fct = jax.jit(matched_correlation_fct)
 
 # stats based on first two cumulants
 # vector/mean orientation similarity, sqrt1.sqrt2/rms1/rms2
-def vector_ori_similarity_s_fct(vector_s_1, vector_s_2, rms_s_1, rms_s_2):
+def vector_angle_cos_s_fct(vector_s_1, vector_s_2):
   part_n = vector_s_1.shape[-1]
   return(jnp.einsum("...i, ...i -> ...", vector_s_1, vector_s_2)
-         / rms_s_1 / rms_s_2 / part_n)
+         / jnp.sqrt(jnp.sum(vector_s_1 ** 2, axis = -1) 
+                    * jnp.sum(vector_s_2 ** 2, axis = -1)))
+vector_angle_cos_s_fct = jax.jit(vector_angle_cos_s_fct)
 
 # eigen system/principal components
 def es_s_fct(matrix_s, prop = "pd"):
